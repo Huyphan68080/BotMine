@@ -4,44 +4,56 @@ const { Server } = require('socket.io');
 const cors = require('cors');
 const mineflayer = require('mineflayer');
 
-// Hàm phân tích và chuyển đổi NBT chat component / JSON chat component của Minecraft thành chuỗi thông thường
-function parseNbtChat(nbt) {
-  if (!nbt) return '';
-  if (typeof nbt === 'string') return nbt;
+// Hàm phân tích và đệ quy trích xuất chuỗi từ bất kỳ đối tượng Chat Component / NBT nào của Minecraft
+function extractAllStrings(obj) {
+  if (obj === null || obj === undefined) return '';
+  if (typeof obj === 'string') return obj;
+  if (typeof obj === 'number' || typeof obj === 'boolean') return String(obj);
   
-  // NBT compound tag đại diện cho Chat Component
-  if (nbt.type === 'compound' && nbt.value) {
-    let text = '';
-    if (nbt.value.text && nbt.value.text.value) {
-      text += nbt.value.text.value;
+  if (Array.isArray(obj)) {
+    return obj.map(extractAllStrings).join('');
+  }
+  
+  if (typeof obj === 'object') {
+    // Nếu đối tượng có thuộc tính "value" đại diện cho giá trị thực tế của NBT Tag
+    if (obj.value !== undefined) {
+      if (typeof obj.value === 'string') return obj.value;
+      return extractAllStrings(obj.value);
     }
-    if (nbt.value.extra && nbt.value.extra.value && nbt.value.extra.value.value) {
-      const extraList = nbt.value.extra.value.value;
-      if (Array.isArray(extraList)) {
-        for (const item of extraList) {
-          text += parseNbtChat(item);
-        }
+    
+    // Nếu là Chat Component JSON chuẩn
+    if (obj.text !== undefined && typeof obj.text === 'string') {
+      let result = obj.text;
+      if (Array.isArray(obj.extra)) {
+        result += extractAllStrings(obj.extra);
+      }
+      return result;
+    }
+    
+    let result = '';
+    // Thử truy xuất các trường phổ biến
+    if (obj.text) result += extractAllStrings(obj.text);
+    if (obj.translate) result += extractAllStrings(obj.translate);
+    if (obj.extra) result += extractAllStrings(obj.extra);
+    if (obj[""]) result += extractAllStrings(obj[""]);
+    
+    if (result) return result;
+    
+    // Fallback: Quét toàn bộ thuộc tính để tìm chuỗi
+    let keys = Object.keys(obj);
+    for (let key of keys) {
+      if (key === 'type') continue; // Bỏ qua nhãn định dạng kiểu dữ liệu
+      const val = obj[key];
+      if (typeof val === 'string') {
+        result += val;
+      } else if (typeof val === 'object') {
+        result += extractAllStrings(val);
       }
     }
-    return text;
+    return result;
   }
   
-  if (nbt.type === 'string' && nbt.value) {
-    return nbt.value;
-  }
-
-  // Cấu trúc Chat Component JSON chuẩn (nếu có)
-  if (nbt.text !== undefined) {
-    let text = nbt.text;
-    if (Array.isArray(nbt.extra)) {
-      for (const item of nbt.extra) {
-        text += parseNbtChat(item);
-      }
-    }
-    return text;
-  }
-  
-  return JSON.stringify(nbt);
+  return '';
 }
 
 function parseKickReason(reason) {
@@ -49,12 +61,12 @@ function parseKickReason(reason) {
   if (typeof reason === 'string') {
     try {
       const parsed = JSON.parse(reason);
-      return parseNbtChat(parsed);
+      return extractAllStrings(parsed);
     } catch (e) {
       return reason;
     }
   }
-  return parseNbtChat(reason);
+  return extractAllStrings(reason);
 }
 
 // Khởi tạo ứng dụng Express
