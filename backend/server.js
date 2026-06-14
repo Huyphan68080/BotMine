@@ -353,25 +353,23 @@ io.on('connection', (socket) => {
     const loggedEntityNames = {};
 
     function handleEntityText(entity) {
+      // Bỏ qua thực thể của chính bot
+      if (bot.entity && entity.id === bot.entity.id) return;
+
       const name = getEntityName(entity);
       if (!name) return;
       
       const cleanName = name.trim();
       if (!cleanName) return;
       
-      const isHologramType = entity.type === 'armor_stand' || entity.name === 'armor_stand' ||
-                            entity.type === 'text_display' || entity.name === 'text_display';
-                            
-      if (!isHologramType) return;
-      
       const entityId = entity.id;
       if (loggedEntityNames[entityId] === cleanName) return;
       loggedEntityNames[entityId] = cleanName;
       
-      console.log(`[Bot] Phát hiện text hologram [${entity.name || entity.type} (ID: ${entityId})]: ${cleanName}`);
+      console.log(`[Bot] Phát hiện thực thể có tên [${entity.name || entity.type} (ID: ${entityId})]: ${cleanName}`);
       socket.emit('bot-chat', {
         sender: 'System',
-        message: `[Hologram - ${entity.name || entity.type}] ${cleanName}`,
+        message: `[Thực thể - ${entity.name || entity.type}] ${cleanName}`,
         time: new Date().toLocaleTimeString('vi-VN', { hour12: false })
       });
       
@@ -426,6 +424,35 @@ io.on('connection', (socket) => {
       bot = mineflayer.createBot(botOptions);
       activeBots[socketId] = bot;
       botConfigs[socketId] = config; // Lưu cấu hình lại để reconect
+
+      // Theo dõi thay đổi hòm đồ để phát hiện và tự động cầm bản đồ captcha ngay khi nhận được
+      bot.inventory.on('updateSlot', (slot, oldItem, newItem) => {
+        if (newItem) {
+          console.log(`[Bot] Vật phẩm mới xuất hiện (Slot ${slot}): ${newItem.name} x ${newItem.count}`);
+          
+          socket.emit('bot-chat', {
+            sender: 'System',
+            message: `[Hòm đồ - Nhận] Slot ${slot}: ${newItem.displayName || newItem.name} (Số lượng: ${newItem.count})`,
+            time: new Date().toLocaleTimeString('vi-VN', { hour12: false })
+          });
+
+          if (newItem.name && (newItem.name.includes('map') || newItem.name.includes('filled_map'))) {
+            console.log(`[Bot] Phát hiện bản đồ mới trong Slot ${slot}. Đang tự động cầm lên tay...`);
+            bot.equip(newItem, 'hand')
+              .then(() => {
+                console.log('[Bot] Đã tự động trang bị bản đồ lên tay.');
+                socket.emit('bot-chat', {
+                  sender: 'System',
+                  message: `[Hòm đồ - Cầm tay] Đã tự động trang bị Bản đồ lên tay chính.`,
+                  time: new Date().toLocaleTimeString('vi-VN', { hour12: false })
+                });
+              })
+              .catch(err => {
+                console.warn('[Bot] Lỗi khi tự động cầm bản đồ:', err.message);
+              });
+          }
+        }
+      });
     } catch (error) {
       console.error('[Bot] Khởi tạo mineflayer thất bại:', error.message);
       socket.emit('bot-status', { status: 'error', message: `Không thể tạo Bot: ${error.message}` });
@@ -493,9 +520,9 @@ io.on('connection', (socket) => {
         
         // 1. Quét tìm biển hiệu (Sign) xung quanh
         try {
-          if (bot.version) {
-            const mcData = require('minecraft-data')(bot.version);
-            const signIds = Object.values(mcData.blocksByName)
+          const registry = bot.registry || (bot.version ? require('minecraft-data')(bot.version) : require('minecraft-data')('1.21.1'));
+          if (registry) {
+            const signIds = Object.values(registry.blocksByName)
               .filter(b => b.name && b.name.includes('sign'))
               .map(b => b.id);
               
@@ -589,10 +616,11 @@ io.on('connection', (socket) => {
       setTimeout(() => {
         if (!activeBots[socket.id]) return;
         try {
-          const mcData = require('minecraft-data')(bot.version);
-          const signIds = Object.values(mcData.blocksByName)
-            .filter(b => b.name && b.name.includes('sign'))
-            .map(b => b.id);
+          const registry = bot.registry || (bot.version ? require('minecraft-data')(bot.version) : require('minecraft-data')('1.21.1'));
+          if (registry) {
+            const signIds = Object.values(registry.blocksByName)
+              .filter(b => b.name && b.name.includes('sign'))
+              .map(b => b.id);
             
           const signBlocks = bot.findBlocks({
             matching: signIds,
@@ -616,9 +644,10 @@ io.on('connection', (socket) => {
               }
             }
           }
-        } catch (err) {
-          console.error('[Bot] Lỗi khi quét tìm biển báo:', err.message);
         }
+      } catch (err) {
+        console.error('[Bot] Lỗi khi quét tìm biển báo:', err.message);
+      }
       }, 2000);
     });
 
