@@ -335,6 +335,8 @@ const activeBots = {};
 const botConfigs = {};
 // Lưu trữ bộ hẹn giờ kết nối lại (reconnect timers)
 const reconnectTimers = {};
+// Lưu trữ bộ quét captcha định kỳ (bản đồ, biển hiệu, hologram)
+const scanIntervals = {};
 
 io.on('connection', (socket) => {
   console.log(`[Socket] Client kết nối mới: ${socket.id}`);
@@ -346,6 +348,35 @@ io.on('connection', (socket) => {
   function connectBot(config) {
     const { host, port, username, version, auth, autoReconnect } = config;
     const socketId = socket.id;
+
+    // Lưu các tên thực thể đã log để tránh gửi trùng lặp
+    const loggedEntityNames = {};
+
+    function handleEntityText(entity) {
+      const name = getEntityName(entity);
+      if (!name) return;
+      
+      const cleanName = name.trim();
+      if (!cleanName) return;
+      
+      const isHologramType = entity.type === 'armor_stand' || entity.name === 'armor_stand' ||
+                            entity.type === 'text_display' || entity.name === 'text_display';
+                            
+      if (!isHologramType) return;
+      
+      const entityId = entity.id;
+      if (loggedEntityNames[entityId] === cleanName) return;
+      loggedEntityNames[entityId] = cleanName;
+      
+      console.log(`[Bot] Phát hiện text hologram [${entity.name || entity.type} (ID: ${entityId})]: ${cleanName}`);
+      socket.emit('bot-chat', {
+        sender: 'System',
+        message: `[Hologram - ${entity.name || entity.type}] ${cleanName}`,
+        time: new Date().toLocaleTimeString('vi-VN', { hour12: false })
+      });
+      
+      checkAndSolveCaptcha(cleanName, bot);
+    }
 
     console.log(`[Bot] Khởi tạo kết nối cho ${socketId} -> ${host}:${port || 25565} [Auth: ${auth || 'offline'}, AutoReconnect: ${autoReconnect}]`);
 
@@ -363,6 +394,12 @@ io.on('connection', (socket) => {
     if (reconnectTimers[socketId]) {
       clearTimeout(reconnectTimers[socketId]);
       delete reconnectTimers[socketId];
+    }
+
+    // Xóa bộ quét định kỳ cũ nếu có
+    if (scanIntervals[socketId]) {
+      clearInterval(scanIntervals[socketId]);
+      delete scanIntervals[socketId];
     }
 
     socket.emit('bot-status', { status: 'connecting', message: 'Đang kết nối tới server Minecraft...' });
@@ -397,6 +434,12 @@ io.on('connection', (socket) => {
 
     // Xử lý sự kiện ngắt kết nối chung (kicked, end, error)
     function handleBotDisconnect(reasonText, isError = false) {
+      // Xóa bộ quét định kỳ captcha
+      if (scanIntervals[socketId]) {
+        clearInterval(scanIntervals[socketId]);
+        delete scanIntervals[socketId];
+      }
+
       // Nếu socket client đã ngắt kết nối khỏi server backend, giải phóng tài nguyên ngay
       if (!socket.connected) {
         delete activeBots[socketId];
@@ -431,6 +474,95 @@ io.on('connection', (socket) => {
     }
 
     // --- CÁC SỰ KIỆN CỦA BOT ---
+
+    // 0. Khi bot đã đăng nhập thành công vào server (chưa spawn)
+    bot.on('login', () => {
+      console.log(`[Bot] Bot [${bot.username}] đã đăng nhập vào server (đang chờ spawn).`);
+      socket.emit('bot-status', { 
+        status: 'online', 
+        message: `Đã kết nối thành công với tên: ${bot.username} (Đang chờ tải thế giới...)` 
+      });
+
+      // Bắt đầu quét định kỳ để tìm biển báo, bản đồ và hologram ngay khi đăng nhập
+      if (scanIntervals[socketId]) {
+        clearInterval(scanIntervals[socketId]);
+      }
+      
+      scanIntervals[socketId] = setInterval(() => {
+        if (!activeBots[socketId]) return;
+        
+        // 1. Quét tìm biển hiệu (Sign) xung quanh
+        try {
+          if (bot.version) {
+            const mcData = require('minecraft-data')(bot.version);
+            const signIds = Object.values(mcData.blocksByName)
+              .filter(b => b.name && b.name.includes('sign'))
+              .map(b => b.id);
+              
+            const signBlocks = bot.findBlocks({
+              matching: signIds,
+              maxDistance: 16,
+              count: 10
+            });
+            
+            for (const pos of signBlocks) {
+              const block = bot.blockAt(pos);
+              if (block && typeof block.getSignText === 'function') {
+                const lines = block.getSignText();
+                const text = lines.map(l => l.trim()).filter(l => l).join(' | ');
+                if (text) {
+                  const key = `sign_${pos.x}_${pos.y}_${pos.z}`;
+                  if (loggedEntityNames[key] !== text) {
+                    loggedEntityNames[key] = text;
+                    console.log(`[Bot] Phát hiện biển báo tại ${pos}: ${text}`);
+                    socket.emit('bot-chat', {
+                      sender: 'System',
+                      message: `[Biển báo] ${text}`,
+                      time: new Date().toLocaleTimeString('vi-VN', { hour12: false })
+                    });
+                    checkAndSolveCaptcha(text, bot);
+                  }
+                }
+              }
+            }
+          }
+        } catch (err) {
+          // Bỏ qua lỗi quét
+        }
+
+        // 2. Tự động tìm và cầm bản đồ (Map / Filled Map) trên tay
+        try {
+          if (bot.inventory) {
+            const item = bot.inventory.items().find(i => i && i.name && (i.name.includes('map') || i.name.includes('filled_map')));
+            if (item) {
+              const heldItem = bot.heldItem;
+              if (!heldItem || heldItem.type !== item.type) {
+                console.log(`[Bot] Tìm thấy bản đồ trong hòm đồ: ${item.name}. Tiến hành trang bị lên tay...`);
+                bot.equip(item, 'hand')
+                  .catch(err => {
+                    // Chưa sẵn sàng
+                  });
+              }
+            }
+          }
+        } catch (err) {
+          // Bỏ qua lỗi hòm đồ
+        }
+
+        // 3. Quét kiểm tra các thực thể Hologram hiện có xung quanh
+        try {
+          if (bot.entities) {
+            Object.values(bot.entities).forEach(entity => {
+              if (entity) {
+                handleEntityText(entity);
+              }
+            });
+          }
+        } catch (err) {
+          // Bỏ qua lỗi thực thể
+        }
+      }, 1500);
+    });
 
     // 1. Khi bot spawn thành công vào game
     bot.on('spawn', () => {
@@ -657,33 +789,6 @@ io.on('connection', (socket) => {
     });
 
     // 5.9. Lắng nghe và bóc tách chữ trên các thực thể Hologram (ArmorStand, TextDisplay)
-    const loggedEntityNames = {};
-
-    function handleEntityText(entity) {
-      const name = getEntityName(entity);
-      if (!name) return;
-      
-      const cleanName = name.trim();
-      if (!cleanName) return;
-      
-      const isHologramType = entity.type === 'armor_stand' || entity.name === 'armor_stand' ||
-                            entity.type === 'text_display' || entity.name === 'text_display';
-                            
-      if (!isHologramType) return;
-      
-      const entityId = entity.id;
-      if (loggedEntityNames[entityId] === cleanName) return;
-      loggedEntityNames[entityId] = cleanName;
-      
-      console.log(`[Bot] Phát hiện text hologram [${entity.name || entity.type} (ID: ${entityId})]: ${cleanName}`);
-      socket.emit('bot-chat', {
-        sender: 'System',
-        message: `[Hologram - ${entity.name || entity.type}] ${cleanName}`,
-        time: new Date().toLocaleTimeString('vi-VN', { hour12: false })
-      });
-      
-      checkAndSolveCaptcha(cleanName, bot);
-    }
 
     bot.on('entitySpawn', (entity) => {
       handleEntityText(entity);
