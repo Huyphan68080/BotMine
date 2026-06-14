@@ -69,6 +69,33 @@ function parseKickReason(reason) {
   return extractAllStrings(reason);
 }
 
+function getEntityName(entity) {
+  if (!entity) return null;
+  let name = null;
+  if (typeof entity.getCustomName === 'function') {
+    const cn = entity.getCustomName();
+    if (cn) name = cn;
+  }
+  if (!name && entity.customName) name = entity.customName;
+  if (!name && entity.displayName) name = entity.displayName;
+  
+  if (!name) return null;
+  
+  if (typeof name === 'object') {
+    return extractAllStrings(name);
+  }
+  
+  if (typeof name === 'string') {
+    try {
+      const parsed = JSON.parse(name);
+      return extractAllStrings(parsed);
+    } catch (e) {
+      return name;
+    }
+  }
+  return String(name);
+}
+
 // Hàm tự động phát hiện và giải quyết Captcha dạng văn bản bằng Regex
 function checkAndSolveCaptcha(messageStr, bot) {
   if (!messageStr || !bot) return;
@@ -425,6 +452,42 @@ io.on('connection', (socket) => {
           }
         });
       }
+
+      // Quét tìm biển hiệu (Sign) xung quanh khi spawn để tìm captcha
+      setTimeout(() => {
+        if (!activeBots[socket.id]) return;
+        try {
+          const mcData = require('minecraft-data')(bot.version);
+          const signIds = Object.values(mcData.blocksByName)
+            .filter(b => b.name && b.name.includes('sign'))
+            .map(b => b.id);
+            
+          const signBlocks = bot.findBlocks({
+            matching: signIds,
+            maxDistance: 16,
+            count: 10
+          });
+          
+          for (const pos of signBlocks) {
+            const block = bot.blockAt(pos);
+            if (block && typeof block.getSignText === 'function') {
+              const lines = block.getSignText();
+              const text = lines.map(l => l.trim()).filter(l => l).join(' | ');
+              if (text) {
+                console.log(`[Bot] Phát hiện biển báo khi spawn tại ${pos}: ${text}`);
+                socket.emit('bot-chat', {
+                  sender: 'System',
+                  message: `[Biển báo] ${text}`,
+                  time: new Date().toLocaleTimeString('vi-VN', { hour12: false })
+                });
+                checkAndSolveCaptcha(text, bot);
+              }
+            }
+          }
+        } catch (err) {
+          console.error('[Bot] Lỗi khi quét tìm biển báo:', err.message);
+        }
+      }, 2000);
     });
 
     // 2. Cập nhật lượng máu và thức ăn của bot
@@ -591,6 +654,66 @@ io.on('connection', (socket) => {
       
       // Kiểm tra xem BossBar có chứa captcha không
       checkAndSolveCaptcha(text, bot);
+    });
+
+    // 5.9. Lắng nghe và bóc tách chữ trên các thực thể Hologram (ArmorStand, TextDisplay)
+    const loggedEntityNames = {};
+
+    function handleEntityText(entity) {
+      const name = getEntityName(entity);
+      if (!name) return;
+      
+      const cleanName = name.trim();
+      if (!cleanName) return;
+      
+      const isHologramType = entity.type === 'armor_stand' || entity.name === 'armor_stand' ||
+                            entity.type === 'text_display' || entity.name === 'text_display';
+                            
+      if (!isHologramType) return;
+      
+      const entityId = entity.id;
+      if (loggedEntityNames[entityId] === cleanName) return;
+      loggedEntityNames[entityId] = cleanName;
+      
+      console.log(`[Bot] Phát hiện text hologram [${entity.name || entity.type} (ID: ${entityId})]: ${cleanName}`);
+      socket.emit('bot-chat', {
+        sender: 'System',
+        message: `[Hologram - ${entity.name || entity.type}] ${cleanName}`,
+        time: new Date().toLocaleTimeString('vi-VN', { hour12: false })
+      });
+      
+      checkAndSolveCaptcha(cleanName, bot);
+    }
+
+    bot.on('entitySpawn', (entity) => {
+      handleEntityText(entity);
+    });
+
+    bot.on('entityUpdate', (entity) => {
+      handleEntityText(entity);
+    });
+
+    // 5.10. Lắng nghe cập nhật block để xem có biển hiệu (Sign) mới được sửa đổi/xuất hiện không
+    bot.on('blockUpdate', (oldBlock, newBlock) => {
+      if (newBlock && newBlock.name && newBlock.name.includes('sign')) {
+        setTimeout(() => {
+          if (!activeBots[socket.id]) return;
+          const block = bot.blockAt(newBlock.position);
+          if (block && typeof block.getSignText === 'function') {
+            const lines = block.getSignText();
+            const text = lines.map(line => line.trim()).filter(line => line).join(' | ');
+            if (text) {
+              console.log(`[Bot] Phát hiện biển báo cập nhật tại ${newBlock.position}: ${text}`);
+              socket.emit('bot-chat', {
+                sender: 'System',
+                message: `[Biển báo] ${text}`,
+                time: new Date().toLocaleTimeString('vi-VN', { hour12: false })
+              });
+              checkAndSolveCaptcha(text, bot);
+            }
+          }
+        }, 500);
+      }
     });
 
     // 6. Khi bot bị kick khỏi server
