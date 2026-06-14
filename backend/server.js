@@ -352,6 +352,30 @@ io.on('connection', (socket) => {
     // Lưu các tên thực thể đã log để tránh gửi trùng lặp
     const loggedEntityNames = {};
 
+    function handleMapPacket(packet) {
+      if (!packet) return;
+      const id = packet.mapId !== undefined ? packet.mapId : packet.map_id;
+      const width = packet.columns;
+      const height = packet.rows;
+      const colors = packet.data;
+      
+      console.log(`[Bot] Nhận gói dữ liệu bản đồ qua packet. ID: ${id}, Kích thước: ${width}x${height}`);
+      
+      if (width === 128 && height === 128 && colors) {
+        try {
+          const bmpBuffer = generateBmpBuffer(colors);
+          const base64Image = 'data:image/bmp;base64,' + bmpBuffer.toString('base64');
+          console.log(`[Bot] Đã tạo ảnh bản đồ thành công (Base64). Đang gửi lên frontend...`);
+          socket.emit('bot-map', {
+            id: id,
+            image: base64Image
+          });
+        } catch (err) {
+          console.error('[Bot] Lỗi khi tạo ảnh bản đồ từ packet:', err.message);
+        }
+      }
+    }
+
     function handleEntityText(entity) {
       // Bỏ qua thực thể của chính bot
       if (bot.entity && entity.id === bot.entity.id) return;
@@ -512,6 +536,12 @@ io.on('connection', (socket) => {
             }
           }
         });
+      }
+
+      // Đăng ký lắng nghe packet map_data và map để nhận diện dữ liệu ảnh bản đồ
+      if (bot._client) {
+        bot._client.on('map_data', handleMapPacket);
+        bot._client.on('map', handleMapPacket);
       }
 
       // Bắt đầu quét định kỳ để tìm biển báo, bản đồ và hologram ngay khi đăng nhập
@@ -721,23 +751,7 @@ io.on('connection', (socket) => {
       }
     });
 
-    // 5.5. Lắng nghe dữ liệu bản đồ để giải quyết Map Captcha
-    bot.on('map_data', (id, name, width, height, colors) => {
-      console.log(`[Bot] Nhận gói dữ liệu bản đồ. ID: ${id}, Kích thước: ${width}x${height}`);
-      if (width === 128 && height === 128 && colors) {
-        try {
-          const bmpBuffer = generateBmpBuffer(colors);
-          const base64Image = 'data:image/bmp;base64,' + bmpBuffer.toString('base64');
-          console.log(`[Bot] Đã tạo ảnh bản đồ thành công (Base64). Đang gửi lên frontend...`);
-          socket.emit('bot-map', {
-            id: id,
-            image: base64Image
-          });
-        } catch (err) {
-          console.error('[Bot] Lỗi khi tạo ảnh bản đồ:', err.message);
-        }
-      }
-    });
+
 
     // 5.6. Lắng nghe tiêu đề (Title) để hiển thị Captcha hoặc thông tin từ server
     bot.on('title', (titleText, type) => {
