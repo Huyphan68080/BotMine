@@ -508,6 +508,7 @@ io.on('connection', (socket) => {
         } catch (err) {
           console.error('[Bot] Lỗi khi tạo ảnh bản đồ:', err.message);
         }
+      }
     });
 
     // 5.6. Lắng nghe tiêu đề (Title) để hiển thị Captcha hoặc thông tin từ server
