@@ -4,6 +4,59 @@ const { Server } = require('socket.io');
 const cors = require('cors');
 const mineflayer = require('mineflayer');
 
+// Hàm phân tích và chuyển đổi NBT chat component / JSON chat component của Minecraft thành chuỗi thông thường
+function parseNbtChat(nbt) {
+  if (!nbt) return '';
+  if (typeof nbt === 'string') return nbt;
+  
+  // NBT compound tag đại diện cho Chat Component
+  if (nbt.type === 'compound' && nbt.value) {
+    let text = '';
+    if (nbt.value.text && nbt.value.text.value) {
+      text += nbt.value.text.value;
+    }
+    if (nbt.value.extra && nbt.value.extra.value && nbt.value.extra.value.value) {
+      const extraList = nbt.value.extra.value.value;
+      if (Array.isArray(extraList)) {
+        for (const item of extraList) {
+          text += parseNbtChat(item);
+        }
+      }
+    }
+    return text;
+  }
+  
+  if (nbt.type === 'string' && nbt.value) {
+    return nbt.value;
+  }
+
+  // Cấu trúc Chat Component JSON chuẩn (nếu có)
+  if (nbt.text !== undefined) {
+    let text = nbt.text;
+    if (Array.isArray(nbt.extra)) {
+      for (const item of nbt.extra) {
+        text += parseNbtChat(item);
+      }
+    }
+    return text;
+  }
+  
+  return JSON.stringify(nbt);
+}
+
+function parseKickReason(reason) {
+  if (!reason) return 'Bị kick không rõ lý do';
+  if (typeof reason === 'string') {
+    try {
+      const parsed = JSON.parse(reason);
+      return parseNbtChat(parsed);
+    } catch (e) {
+      return reason;
+    }
+  }
+  return parseNbtChat(reason);
+}
+
 // Khởi tạo ứng dụng Express
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -224,17 +277,9 @@ io.on('connection', (socket) => {
 
     // 6. Khi bot bị kick khỏi server
     bot.on('kicked', (reason) => {
-      console.log(`[Bot] Bot bị kick khỏi server. Lý do: ${reason}`);
-      let kickReason = 'Bị kick khỏi server';
-      try {
-        const parsed = JSON.parse(reason);
-        if (parsed.text) kickReason = parsed.text;
-        else if (parsed.extra && parsed.extra[0]) kickReason = parsed.extra.map(e => e.text).join('');
-      } catch (e) {
-        kickReason = typeof reason === 'string' ? reason : JSON.stringify(reason);
-      }
-
-      handleBotDisconnect(`Bot bị kick! Lý do: ${kickReason}`);
+      const parsedReason = parseKickReason(reason);
+      console.log(`[Bot] Bot bị kick khỏi server. Lý do: ${parsedReason}`);
+      handleBotDisconnect(`Bot bị kick! Lý do: ${parsedReason}`);
     });
 
     // 7. Khi kết nối bot kết thúc (bị ngắt kết nối)
