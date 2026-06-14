@@ -198,7 +198,7 @@ io.on('connection', (socket) => {
     // Dừng bot cũ nếu có
     if (activeBots[socketId]) {
       try {
-        activeBots[socketId].quit();
+        activeBots[socketId].end();
       } catch (err) {
         console.error('[Bot] Lỗi khi dừng bot cũ:', err.message);
       }
@@ -429,7 +429,7 @@ io.on('connection', (socket) => {
     if (bot) {
       console.log(`[Bot] Người dùng yêu cầu dừng bot của socket: ${socketId}`);
       try {
-        bot.quit();
+        bot.end();
       } catch (err) {
         console.error('[Bot] Lỗi khi quit bot:', err.message);
       }
@@ -453,7 +453,7 @@ io.on('connection', (socket) => {
     if (bot) {
       console.log(`[Bot] Tự động giải phóng bot của socket ${socketId} do ngắt kết nối web.`);
       try {
-        bot.quit();
+        bot.end();
       } catch (err) {
         console.error('[Bot] Lỗi khi tự động quit bot:', err.message);
       }
