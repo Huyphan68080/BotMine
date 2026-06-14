@@ -425,34 +425,7 @@ io.on('connection', (socket) => {
       activeBots[socketId] = bot;
       botConfigs[socketId] = config; // Lưu cấu hình lại để reconect
 
-      // Theo dõi thay đổi hòm đồ để phát hiện và tự động cầm bản đồ captcha ngay khi nhận được
-      bot.inventory.on('updateSlot', (slot, oldItem, newItem) => {
-        if (newItem) {
-          console.log(`[Bot] Vật phẩm mới xuất hiện (Slot ${slot}): ${newItem.name} x ${newItem.count}`);
-          
-          socket.emit('bot-chat', {
-            sender: 'System',
-            message: `[Hòm đồ - Nhận] Slot ${slot}: ${newItem.displayName || newItem.name} (Số lượng: ${newItem.count})`,
-            time: new Date().toLocaleTimeString('vi-VN', { hour12: false })
-          });
 
-          if (newItem.name && (newItem.name.includes('map') || newItem.name.includes('filled_map'))) {
-            console.log(`[Bot] Phát hiện bản đồ mới trong Slot ${slot}. Đang tự động cầm lên tay...`);
-            bot.equip(newItem, 'hand')
-              .then(() => {
-                console.log('[Bot] Đã tự động trang bị bản đồ lên tay.');
-                socket.emit('bot-chat', {
-                  sender: 'System',
-                  message: `[Hòm đồ - Cầm tay] Đã tự động trang bị Bản đồ lên tay chính.`,
-                  time: new Date().toLocaleTimeString('vi-VN', { hour12: false })
-                });
-              })
-              .catch(err => {
-                console.warn('[Bot] Lỗi khi tự động cầm bản đồ:', err.message);
-              });
-          }
-        }
-      });
     } catch (error) {
       console.error('[Bot] Khởi tạo mineflayer thất bại:', error.message);
       socket.emit('bot-status', { status: 'error', message: `Không thể tạo Bot: ${error.message}` });
@@ -509,6 +482,37 @@ io.on('connection', (socket) => {
         status: 'online', 
         message: `Đã kết nối thành công với tên: ${bot.username} (Đang chờ tải thế giới...)` 
       });
+
+      // Theo dõi thay đổi hòm đồ để phát hiện và tự động cầm bản đồ captcha ngay khi nhận được
+      if (bot.inventory) {
+        bot.inventory.on('updateSlot', (slot, oldItem, newItem) => {
+          if (newItem) {
+            console.log(`[Bot] Vật phẩm mới xuất hiện (Slot ${slot}): ${newItem.name} x ${newItem.count}`);
+            
+            socket.emit('bot-chat', {
+              sender: 'System',
+              message: `[Hòm đồ - Nhận] Slot ${slot}: ${newItem.displayName || newItem.name} (Số lượng: ${newItem.count})`,
+              time: new Date().toLocaleTimeString('vi-VN', { hour12: false })
+            });
+
+            if (newItem.name && (newItem.name.includes('map') || newItem.name.includes('filled_map'))) {
+              console.log(`[Bot] Phát hiện bản đồ mới trong Slot ${slot}. Đang tự động cầm lên tay...`);
+              bot.equip(newItem, 'hand')
+                .then(() => {
+                  console.log('[Bot] Đã tự động trang bị bản đồ lên tay.');
+                  socket.emit('bot-chat', {
+                    sender: 'System',
+                    message: `[Hòm đồ - Cầm tay] Đã tự động trang bị Bản đồ lên tay chính.`,
+                    time: new Date().toLocaleTimeString('vi-VN', { hour12: false })
+                  });
+                })
+                .catch(err => {
+                  console.warn('[Bot] Lỗi khi tự động cầm bản đồ:', err.message);
+                });
+            }
+          }
+        });
+      }
 
       // Bắt đầu quét định kỳ để tìm biển báo, bản đồ và hologram ngay khi đăng nhập
       if (scanIntervals[socketId]) {
