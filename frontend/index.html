@@ -246,6 +246,22 @@
           <div class="text-slate-500 italic text-xs">Hệ thống: Chưa khởi động bot để ghi nhật ký chat...</div>
         </div>
 
+        <!-- Khung hiển thị Captcha Bản đồ (ẩn mặc định, chỉ hiện khi nhận được ảnh) -->
+        <div id="captcha-container" class="hidden bg-slate-950 border border-slate-800 rounded-xl p-3 mt-3 flex items-center justify-between gap-4">
+          <div class="flex items-center gap-3">
+            <div class="bg-slate-900 border border-slate-800 p-1 rounded-lg">
+              <img id="captcha-img" src="" alt="Captcha Map" class="w-24 h-24 object-contain pixelated border border-slate-700 rounded shadow-md">
+            </div>
+            <div>
+              <h3 class="text-xs font-semibold text-amber-500 uppercase tracking-wider">🧩 Phát hiện Captcha Bản đồ</h3>
+              <p class="text-[11px] text-slate-400 mt-1">Đọc mã trên bản đồ và nhập vào ô chat bên dưới để giải.</p>
+            </div>
+          </div>
+          <button id="btn-close-captcha" class="text-xs text-slate-500 hover:text-slate-300 px-2.5 py-1 bg-slate-900 border border-slate-800 rounded-lg transition active:scale-95">
+            Ẩn
+          </button>
+        </div>
+
         <!-- Chat Input Form -->
         <div class="mt-4 flex gap-2 shrink-0">
           <input type="text" id="chat-input" disabled placeholder="Kết nối bot để bắt đầu nhắn tin..." 

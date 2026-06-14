@@ -55,3 +55,10 @@ span#coord-x, span#coord-y, span#coord-z {
     max-height: 350px;
   }
 }
+
+/* Đảm bảo ảnh vẽ bản đồ sắc nét, không bị nhòe mờ */
+.pixelated {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  image-rendering: -moz-crisp-edges;
+}

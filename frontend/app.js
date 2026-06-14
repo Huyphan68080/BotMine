@@ -328,6 +328,35 @@ document.addEventListener('DOMContentLoaded', () => {
       
       appendChatLog(sender, message, type, time);
     });
+
+    // 4. Nhận ảnh bản đồ captcha
+    socket.on('bot-map', (data) => {
+      console.log('[Socket] Nhận ảnh bản đồ Captcha, ID:', data.id);
+      const captchaContainer = document.getElementById('captcha-container');
+      const captchaImg = document.getElementById('captcha-img');
+      if (captchaContainer && captchaImg && data.image) {
+        captchaImg.src = data.image;
+        captchaContainer.classList.remove('hidden');
+        appendChatLog('System', 'Phát hiện mã xác thực Captcha bằng hình ảnh trên bản đồ! Hãy xem ảnh hiển thị và nhập mã vào ô chat.', 'system');
+      }
+    });
+
+    // 5. Ẩn captcha khi bot ngắt kết nối
+    socket.on('bot-status', (data) => {
+      if (data.status === 'offline' || data.status === 'error') {
+        const captchaContainer = document.getElementById('captcha-container');
+        if (captchaContainer) captchaContainer.classList.add('hidden');
+      }
+    });
+  }
+
+  // Đóng container captcha bản đồ
+  const btnCloseCaptcha = document.getElementById('btn-close-captcha');
+  const captchaContainer = document.getElementById('captcha-container');
+  if (btnCloseCaptcha && captchaContainer) {
+    btnCloseCaptcha.addEventListener('click', () => {
+      captchaContainer.classList.add('hidden');
+    });
   }
 
   // --- Hàm chèn log chat vào giao diện ---

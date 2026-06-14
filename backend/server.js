@@ -138,6 +138,133 @@ function checkAndSolveCaptcha(messageStr, bot) {
   }
 }
 
+// Bảng màu cơ bản của Bản đồ Minecraft (Minecraft Map Colors)
+const baseColors = [
+  [0, 0, 0],         // 0: transparent
+  [127, 178, 56],    // 1: grass
+  [247, 233, 163],   // 2: sand
+  [199, 199, 199],   // 3: wool
+  [255, 0, 0],       // 4: fire
+  [160, 160, 255],   // 5: ice
+  [167, 167, 167],   // 6: iron
+  [0, 124, 0],       // 7: foliage
+  [255, 255, 255],   // 8: snow
+  [164, 168, 184],   // 9: clay
+  [151, 109, 77],    // 10: dirt
+  [112, 112, 112],   // 11: stone
+  [64, 64, 255],     // 12: water
+  [143, 119, 72],    // 13: wood
+  [255, 252, 245],   // 14: quartz
+  [216, 127, 51],    // 15: orange
+  [178, 76, 216],    // 16: magenta
+  [102, 153, 216],   // 17: light blue
+  [229, 229, 51],    // 18: yellow
+  [127, 204, 25],    // 19: lime
+  [242, 127, 165],   // 20: pink
+  [76, 76, 76],      // 21: gray
+  [153, 153, 153],   // 22: light gray
+  [76, 127, 153],    // 23: cyan
+  [127, 63, 178],    // 24: purple
+  [51, 76, 178],     // 25: blue
+  [102, 76, 51],      // 26: brown
+  [102, 127, 51],    // 27: green
+  [153, 51, 51],     // 28: red
+  [25, 25, 25],      // 29: black
+  [250, 238, 77],    // 30: gold
+  [92, 219, 219],    // 31: diamond
+  [74, 128, 255],    // 32: lapis
+  [0, 217, 58],      // 33: emerald
+  [129, 86, 49],     // 34: podzol
+  [112, 2, 0],       // 35: nether
+  [209, 177, 161],   // 36: white terracotta
+  [159, 82, 36],     // 37: orange terracotta
+  [149, 87, 108],    // 38: magenta terracotta
+  [112, 108, 138],   // 39: light blue terracotta
+  [186, 133, 36],    // 40: yellow terracotta
+  [103, 117, 53],    // 41: lime terracotta
+  [160, 77, 78],     // 42: pink terracotta
+  [57, 41, 35],      // 43: gray terracotta
+  [135, 107, 98],    // 44: light gray terracotta
+  [87, 92, 92],      // 45: cyan terracotta
+  [122, 73, 88],     // 46: purple terracotta
+  [76, 62, 92],      // 47: blue terracotta
+  [76, 50, 35],      // 48: brown terracotta
+  [76, 82, 42],      // 49: green terracotta
+  [142, 60, 46],     // 50: red terracotta
+  [37, 22, 16],      // 51: black terracotta
+  [189, 48, 49],     // 52: crimson nylon
+  [148, 63, 97],     // 53: crimson stem
+  [92, 25, 29],      // 54: crimson hyphae
+  [22, 126, 134],    // 55: warped nylium
+  [58, 142, 140],    // 56: warped stem
+  [86, 44, 62],      // 57: warped hyphae
+  [22, 82, 101]      // 58: warped wart block
+];
+
+function getColorRgb(colorId) {
+  const baseId = Math.floor(colorId / 4);
+  const shadeId = colorId % 4;
+  
+  let baseColor = baseColors[baseId];
+  if (!baseColor) {
+    baseColor = [128, 128, 128]; // Mặc định là màu xám nếu vượt dải màu
+  }
+  
+  let multiplier = 1.0;
+  if (shadeId === 0) multiplier = 180 / 255;
+  else if (shadeId === 1) multiplier = 220 / 255;
+  else if (shadeId === 3) multiplier = 135 / 255;
+  
+  return [
+    Math.round(baseColor[0] * multiplier),
+    Math.round(baseColor[1] * multiplier),
+    Math.round(baseColor[2] * multiplier)
+  ];
+}
+
+function generateBmpBuffer(colors) {
+  const fileHeaderSize = 14;
+  const infoHeaderSize = 40;
+  const pixelDataSize = 128 * 128 * 3;
+  const fileSize = fileHeaderSize + infoHeaderSize + pixelDataSize;
+  
+  const buffer = Buffer.alloc(fileSize);
+  
+  // --- File Header ---
+  buffer.write('BM', 0, 2); // Ký hiệu BMP
+  buffer.writeUInt32LE(fileSize, 2); // Kích thước file
+  buffer.writeUInt32LE(0, 6); // Reserved
+  buffer.writeUInt32LE(fileHeaderSize + infoHeaderSize, 10); // Offset dữ liệu ảnh
+  
+  // --- Info Header ---
+  buffer.writeUInt32LE(infoHeaderSize, 14); // Kích thước Info Header
+  buffer.writeInt32LE(128, 18); // Chiều rộng
+  buffer.writeInt32LE(-128, 22); // Chiều cao (Âm để kết xuất ảnh từ trên xuống dưới)
+  buffer.writeUInt16LE(1, 26); // Số lớp màu (Planes)
+  buffer.writeUInt16LE(24, 28); // Bit mỗi Pixel (24-bit BGR)
+  buffer.writeUInt32LE(0, 30); // Phương pháp nén (0 = Không nén)
+  buffer.writeUInt32LE(pixelDataSize, 34); // Kích thước dữ liệu điểm ảnh
+  buffer.writeInt32LE(0, 38); // Độ phân giải ngang
+  buffer.writeInt32LE(0, 42); // Độ phân giải dọc
+  buffer.writeUInt32LE(0, 46); // Số màu trong bảng màu
+  buffer.writeUInt32LE(0, 50); // Số màu quan trọng
+  
+  // --- Pixel Data (BGR Order) ---
+  let offset = fileHeaderSize + infoHeaderSize;
+  for (let i = 0; i < colors.length; i++) {
+    const colorId = colors[i];
+    const rgb = getColorRgb(colorId);
+    
+    // Lưu thứ tự BGR
+    buffer.writeUInt8(rgb[2], offset);     // Blue
+    buffer.writeUInt8(rgb[1], offset + 1); // Green
+    buffer.writeUInt8(rgb[0], offset + 2); // Red
+    offset += 3;
+  }
+  
+  return buffer;
+}
+
 // Khởi tạo ứng dụng Express
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -363,6 +490,24 @@ io.on('connection', (socket) => {
           message: messageStr,
           time: new Date().toLocaleTimeString('vi-VN', { hour12: false })
         });
+      }
+    });
+
+    // 5.5. Lắng nghe dữ liệu bản đồ để giải quyết Map Captcha
+    bot.on('map_data', (id, name, width, height, colors) => {
+      console.log(`[Bot] Nhận gói dữ liệu bản đồ. ID: ${id}, Kích thước: ${width}x${height}`);
+      if (width === 128 && height === 128 && colors) {
+        try {
+          const bmpBuffer = generateBmpBuffer(colors);
+          const base64Image = 'data:image/bmp;base64,' + bmpBuffer.toString('base64');
+          console.log(`[Bot] Đã tạo ảnh bản đồ thành công (Base64). Đang gửi lên frontend...`);
+          socket.emit('bot-map', {
+            id: id,
+            image: base64Image
+          });
+        } catch (err) {
+          console.error('[Bot] Lỗi khi tạo ảnh bản đồ:', err.message);
+        }
       }
     });
 
