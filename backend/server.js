@@ -508,7 +508,88 @@ io.on('connection', (socket) => {
         } catch (err) {
           console.error('[Bot] Lỗi khi tạo ảnh bản đồ:', err.message);
         }
+    });
+
+    // 5.6. Lắng nghe tiêu đề (Title) để hiển thị Captcha hoặc thông tin từ server
+    bot.on('title', (titleText, type) => {
+      if (!titleText) return;
+      let text = titleText;
+      if (typeof text === 'object') {
+        text = extractAllStrings(text);
       }
+      if (!text.trim()) return;
+      
+      console.log(`[Bot] Nhận tiêu đề (${type}): ${text}`);
+      socket.emit('bot-chat', {
+        sender: 'System',
+        message: `[Tiêu đề - ${type}] ${text}`,
+        time: new Date().toLocaleTimeString('vi-VN', { hour12: false })
+      });
+      
+      // Kiểm tra xem tiêu đề có chứa captcha không
+      checkAndSolveCaptcha(text, bot);
+    });
+
+    // 5.7. Lắng nghe ActionBar (thông tin trên thanh công cụ)
+    bot.on('actionBar', (message) => {
+      if (!message) return;
+      let text = message;
+      if (typeof text === 'object') {
+        if (typeof text.toString === 'function') text = text.toString();
+        else text = extractAllStrings(text);
+      }
+      if (!text.trim()) return;
+      
+      console.log(`[Bot] Nhận ActionBar: ${text}`);
+      socket.emit('bot-chat', {
+        sender: 'System',
+        message: `[Action Bar] ${text}`,
+        time: new Date().toLocaleTimeString('vi-VN', { hour12: false })
+      });
+      
+      // Kiểm tra xem ActionBar có chứa captcha không
+      checkAndSolveCaptcha(text, bot);
+    });
+
+    // 5.8. Lắng nghe BossBar (thanh Boss trên cùng)
+    bot.on('bossBarCreated', (bossBar) => {
+      if (!bossBar || !bossBar.title) return;
+      let text = bossBar.title;
+      if (typeof text === 'object') {
+        if (typeof text.toString === 'function') text = text.toString();
+        else text = extractAllStrings(text);
+      }
+      if (!text.trim()) return;
+      
+      console.log(`[Bot] Nhận BossBar mới: ${text}`);
+      socket.emit('bot-chat', {
+        sender: 'System',
+        message: `[Boss Bar] ${text}`,
+        time: new Date().toLocaleTimeString('vi-VN', { hour12: false })
+      });
+      
+      // Kiểm tra xem BossBar có chứa captcha không
+      checkAndSolveCaptcha(text, bot);
+    });
+
+    bot.on('bossBarUpdated', (bossBar) => {
+      if (!bossBar || !bossBar.title) return;
+      let text = bossBar.title;
+      if (typeof text === 'object') {
+        if (typeof text.toString === 'function') text = text.toString();
+        else text = extractAllStrings(text);
+      }
+      if (!text.trim()) return;
+      
+      console.log(`[Bot] Nhận cập nhật BossBar: ${text}`);
+      socket.emit('bot-chat', {
+        sender: 'System',
+        message: `[Boss Bar Cập nhật] ${text}`,
+        time: new Date().toLocaleTimeString('vi-VN', { hour12: false })
+      });
+      
+      // Kiểm tra xem BossBar có chứa captcha không
+      checkAndSolveCaptcha(text, bot);
     });
 
     // 6. Khi bot bị kick khỏi server
