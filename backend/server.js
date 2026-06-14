@@ -69,6 +69,75 @@ function parseKickReason(reason) {
   return extractAllStrings(reason);
 }
 
+// Hàm tự động phát hiện và giải quyết Captcha dạng văn bản bằng Regex
+function checkAndSolveCaptcha(messageStr, bot) {
+  if (!messageStr || !bot) return;
+
+  // 1. Dạng phổ biến: /captcha XXXX hoặc /capcha XXXX (dấu gạch chéo có thể có hoặc không)
+  const captchaRegex = /[\/\\]capc?ha\s+([a-zA-Z0-9]+)/i;
+  let match = messageStr.match(captchaRegex);
+  if (match && match[1]) {
+    const code = match[1];
+    console.log(`[Auto-Captcha] Phát hiện mã captcha: ${code}. Đang tự động gửi...`);
+    setTimeout(() => {
+      try {
+        bot.chat(`/captcha ${code}`);
+      } catch (err) {
+        console.error('[Auto-Captcha] Gửi captcha thất bại:', err.message);
+      }
+    }, 1000);
+    return;
+  }
+
+  // 2. Dạng: /verify XXXX
+  const verifyRegex = /[\/\\]verify\s+([a-zA-Z0-9]+)/i;
+  match = messageStr.match(verifyRegex);
+  if (match && match[1]) {
+    const code = match[1];
+    console.log(`[Auto-Captcha] Phát hiện mã verify: ${code}. Đang tự động gửi...`);
+    setTimeout(() => {
+      try {
+        bot.chat(`/verify ${code}`);
+      } catch (err) {
+        console.error('[Auto-Captcha] Gửi verify thất bại:', err.message);
+      }
+    }, 1000);
+    return;
+  }
+
+  // 3. Dạng: /confirm XXXX
+  const confirmRegex = /[\/\\]confirm\s+([a-zA-Z0-9]+)/i;
+  match = messageStr.match(confirmRegex);
+  if (match && match[1]) {
+    const code = match[1];
+    console.log(`[Auto-Captcha] Phát hiện mã confirm: ${code}. Đang tự động gửi...`);
+    setTimeout(() => {
+      try {
+        bot.chat(`/confirm ${code}`);
+      } catch (err) {
+        console.error('[Auto-Captcha] Gửi confirm thất bại:', err.message);
+      }
+    }, 1000);
+    return;
+  }
+
+  // 4. Dạng: mã xác minh trơn (chỉ là chuỗi số/chữ 4-6 ký tự có nhãn mô tả)
+  const codeOnlyRegex = /(?:mã xác minh|mã captcha|mã xác thực|verification code|captcha code)(?:\s+của bạn)?(?:\s+là)?[\s:]+([a-zA-Z0-9]{4,6})\b/i;
+  match = messageStr.match(codeOnlyRegex);
+  if (match && match[1]) {
+    const code = match[1];
+    console.log(`[Auto-Captcha] Phát hiện mã xác minh trơn: ${code}. Đang tự động gửi...`);
+    setTimeout(() => {
+      try {
+        bot.chat(code);
+      } catch (err) {
+        console.error('[Auto-Captcha] Gửi mã xác minh thất bại:', err.message);
+      }
+    }, 1000);
+    return;
+  }
+}
+
 // Khởi tạo ứng dụng Express
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -277,6 +346,9 @@ io.on('connection', (socket) => {
     bot.on('messagestr', (messageStr) => {
       if (!messageStr.trim()) return;
       
+      // Tự động kiểm tra và giải captcha nếu có
+      checkAndSolveCaptcha(messageStr, bot);
+
       const isNormalChat = messageStr.includes('<') && messageStr.includes('>');
       if (!isNormalChat) {
         socket.emit('bot-chat', {
