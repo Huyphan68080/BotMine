@@ -220,7 +220,14 @@ io.on('connection', (socket) => {
       username: username || `Bot_${Math.floor(Math.random() * 1000)}`,
       auth: auth === 'microsoft' ? 'microsoft' : 'offline',
       version: version && version !== 'auto' ? version : false,
-      hideErrors: true
+      hideErrors: true,
+      onMsaCode: (data) => {
+        console.log(`[Bot] Cần xác thực Microsoft. Mã: ${data.user_code}`);
+        socket.emit('bot-status', { 
+          status: 'connecting', 
+          message: `Xác thực Microsoft: Truy cập ${data.verification_uri} và nhập mã: ${data.user_code}` 
+        });
+      }
     };
 
     let bot;
