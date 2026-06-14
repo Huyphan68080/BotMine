@@ -1,0 +1,25 @@
+{
+  "name": "minecraft-bot-backend",
+  "version": "1.0.0",
+  "description": "Backend Web Service & Mineflayer Bot Manager for Minecraft Bot Web Control Panel",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "keywords": [
+    "minecraft",
+    "bot",
+    "mineflayer",
+    "control-panel",
+    "socket.io"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "mineflayer": "^4.22.0",
+    "socket.io": "^4.7.5"
+  }
+}

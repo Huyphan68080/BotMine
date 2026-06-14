@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="vi" class="h-full bg-slate-950">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Minecraft Bot Control Panel</title>
+  <!-- Tailwind CSS qua CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts - Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+  <!-- Tùy chỉnh CSS bổ sung -->
+  <link rel="stylesheet" href="style.css">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            mono: ['Fira Code', 'monospace'],
+          },
+        },
+      },
+    }
+  </script>
+</head>
+<body class="h-full text-slate-100 flex flex-col antialiased">
+
+  <!-- Header -->
+  <header class="border-b border-slate-800 bg-slate-900/50 backdrop-blur-md sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <!-- Icon Minecraft kiểu voxel đơn giản -->
+        <div class="w-8 h-8 bg-green-600 rounded flex items-center justify-center font-bold text-lg text-slate-950 border border-green-400 shadow-[0_0_10px_rgba(34,197,94,0.3)]">
+          M
+        </div>
+        <div>
+          <h1 class="text-lg font-bold tracking-tight text-white">MC Bot Panel</h1>
+          <p class="text-xs text-slate-400">Web Control Panel Realtime</p>
+        </div>
+      </div>
+      
+      <!-- Trạng thái Backend & Kết nối socket -->
+      <div class="flex items-center space-x-3 bg-slate-800/60 px-3 py-1.5 rounded-full border border-slate-700">
+        <span class="relative flex h-2.5 w-2.5">
+          <span id="socket-pulse" class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+          <span id="socket-dot" class="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500"></span>
+        </span>
+        <span id="socket-text" class="text-xs font-semibold text-slate-300">Backend: Đang kết nối...</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 flex flex-col lg:flex-row gap-6 overflow-hidden">
+    
+    <!-- Left Column: Cấu hình và Điều khiển -->
+    <div class="w-full lg:w-96 flex flex-col gap-6 shrink-0">
+      
+      <!-- Box 1: Cấu hình Backend URL -->
+      <section class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl">
+        <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-400 mb-4 flex items-center gap-2">
+          ⚙️ Cấu hình API Server
+        </h2>
+        <div class="space-y-3">
+          <div>
+            <label for="backend-url" class="block text-xs font-medium text-slate-400 mb-1">Backend URL (Render hoặc Local)</label>
+            <div class="flex gap-2">
+              <input type="text" id="backend-url" placeholder="http://localhost:3000" 
+                     class="flex-1 bg-slate-950 border border-slate-850 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition">
+              <button id="btn-save-backend" 
+                      class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-4 py-2 rounded-lg transition active:scale-95 shadow-[0_0_15px_rgba(37,99,235,0.2)]">
+                Lưu
+              </button>
+            </div>
+            <p class="text-[10px] text-slate-500 mt-1">Lưu ý: Thay đổi URL yêu cầu tải lại trang.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Box 2: Cấu hình Minecraft Bot -->
+      <section class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl flex-1 flex flex-col justify-between">
+        <div>
+          <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-400 mb-4 flex items-center gap-2">
+            🤖 Cấu hình Minecraft Bot
+          </h2>
+          
+          <form id="bot-config-form" class="space-y-4">
+            <!-- Server IP -->
+            <div>
+              <label for="server-ip" class="block text-xs font-medium text-slate-400 mb-1">Minecraft Server IP (Host)</label>
+              <input type="text" id="server-ip" required placeholder="play.example.com hoặc localhost" 
+                     class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 transition">
+            </div>
+
+            <!-- Server Port & Version -->
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label for="server-port" class="block text-xs font-medium text-slate-400 mb-1">Cổng (Port)</label>
+                <input type="number" id="server-port" value="25565" required 
+                       class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 transition">
+              </div>
+              <div>
+                <label for="minecraft-version" class="block text-xs font-medium text-slate-400 mb-1">Phiên bản (Version)</label>
+                <select id="minecraft-version" 
+                        class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 transition">
+                  <option value="auto">Auto-detect (Tự tìm)</option>
+                  <option value="1.20.4">1.20.4</option>
+                  <option value="1.20.1">1.20.1</option>
+                  <option value="1.19.4">1.19.4</option>
+                  <option value="1.18.2">1.18.2</option>
+                  <option value="1.16.5">1.16.5</option>
+                  <option value="1.12.2">1.12.2</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Bot Username -->
+            <div>
+              <label for="bot-username" class="block text-xs font-medium text-slate-400 mb-1">Tên Bot (Username)</label>
+              <input type="text" id="bot-username" required placeholder="Bot_Minecraft" 
+                     class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 transition">
+            </div>
+
+            <!-- Auth Type & Auto Reconnect -->
+            <div class="grid grid-cols-2 gap-3 items-center">
+              <div>
+                <label for="auth-type" class="block text-xs font-medium text-slate-400 mb-1">Xác thực (Auth)</label>
+                <select id="auth-type" 
+                        class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 transition">
+                  <option value="offline">Offline (Cracked)</option>
+                  <option value="microsoft">Microsoft (Premium)</option>
+                </select>
+              </div>
+              <div class="flex items-center h-full pt-5">
+                <input type="checkbox" id="auto-reconnect" checked 
+                       class="w-4 h-4 rounded bg-slate-950 border-slate-800 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-slate-900 focus:ring-2">
+                <label for="auto-reconnect" class="ml-2 text-xs font-medium text-slate-300 cursor-pointer select-none">Tự kết nối lại</label>
+              </div>
+            </div>
+          </form>
+        </div>
+
+        <!-- Điều khiển Connection -->
+        <div class="mt-6 space-y-2">
+          <button id="btn-connect-bot" type="button"
+                  class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-2.5 px-4 rounded-lg transition active:scale-[0.98] flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(16,185,129,0.2)]">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+            Kết nối Bot
+          </button>
+          
+          <button id="btn-disconnect-bot" type="button" disabled
+                  class="w-full bg-rose-600/50 text-rose-300 border border-rose-800/40 cursor-not-allowed font-semibold py-2.5 px-4 rounded-lg transition active:scale-[0.98] flex items-center justify-center gap-2">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"></path></svg>
+            Ngắt kết nối
+          </button>
+        </div>
+      </section>
+    </div>
+
+    <!-- Right Column: Status Realtime & Chat Log -->
+    <div class="flex-1 flex flex-col gap-6 overflow-hidden">
+      
+      <!-- Panel 1: Realtime Stats -->
+      <section class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl">
+        <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-400 mb-4 flex items-center gap-2">
+          📊 Thông số Bot thời gian thực
+        </h2>
+        
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <!-- Trạng thái kết nối -->
+          <div class="bg-slate-950 p-4 rounded-xl border border-slate-800/60 flex flex-col justify-between">
+            <span class="text-xs text-slate-400 block mb-1">Trạng thái Bot</span>
+            <div class="flex items-center space-x-2 mt-2">
+              <span id="bot-pulse" class="flex h-3.5 w-3.5 relative">
+                <span id="bot-pulse-ring" class="animate-ping absolute inline-flex h-full w-full rounded-full bg-slate-400 opacity-75"></span>
+                <span id="bot-dot" class="relative inline-flex rounded-full h-3.5 w-3.5 bg-slate-500"></span>
+              </span>
+              <span id="bot-status-text" class="text-lg font-bold text-slate-300">Offline</span>
+            </div>
+            <p id="bot-status-desc" class="text-xs text-slate-500 mt-2 truncate">Chưa khởi chạy kết nối</p>
+          </div>
+
+          <!-- Máu & Thức ăn -->
+          <div class="bg-slate-950 p-4 rounded-xl border border-slate-800/60 space-y-3">
+            <!-- Máu -->
+            <div>
+              <div class="flex justify-between items-center text-xs mb-1">
+                <span class="text-slate-400 flex items-center gap-1">❤️ Sinh mệnh (Health)</span>
+                <span id="stat-health-val" class="font-semibold text-rose-400">0/20</span>
+              </div>
+              <div class="w-full bg-slate-900 rounded-full h-2.5 overflow-hidden border border-slate-800">
+                <div id="stat-health-bar" class="bg-rose-500 h-full rounded-full transition-all duration-350" style="width: 0%"></div>
+              </div>
+            </div>
+
+            <!-- Thức ăn -->
+            <div>
+              <div class="flex justify-between items-center text-xs mb-1">
+                <span class="text-slate-400 flex items-center gap-1">🍖 Thức ăn (Food)</span>
+                <span id="stat-food-val" class="font-semibold text-amber-500">0/20</span>
+              </div>
+              <div class="w-full bg-slate-900 rounded-full h-2.5 overflow-hidden border border-slate-800">
+                <div id="stat-food-bar" class="bg-amber-500 h-full rounded-full transition-all duration-350" style="width: 0%"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tọa độ X Y Z -->
+          <div class="bg-slate-950 p-4 rounded-xl border border-slate-800/60">
+            <span class="text-xs text-slate-400 block mb-2">📍 Tọa độ hiện tại</span>
+            <div class="grid grid-cols-3 gap-2 text-center mt-1">
+              <div class="bg-slate-900 p-2 rounded-lg border border-slate-800/50">
+                <span class="text-[10px] text-slate-500 block uppercase font-semibold">X</span>
+                <span id="coord-x" class="text-sm font-mono font-semibold text-blue-400">0.00</span>
+              </div>
+              <div class="bg-slate-900 p-2 rounded-lg border border-slate-800/50">
+                <span class="text-[10px] text-slate-500 block uppercase font-semibold">Y</span>
+                <span id="coord-y" class="text-sm font-mono font-semibold text-emerald-400">0.00</span>
+              </div>
+              <div class="bg-slate-900 p-2 rounded-lg border border-slate-800/50">
+                <span class="text-[10px] text-slate-500 block uppercase font-semibold">Z</span>
+                <span id="coord-z" class="text-sm font-mono font-semibold text-purple-400">0.00</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Panel 2: Live Chat Log -->
+      <section class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl flex-1 flex flex-col overflow-hidden min-h-[300px]">
+        <div class="flex items-center justify-between mb-3 shrink-0">
+          <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+            💬 Nhật ký Server Game (Chat Log)
+          </h2>
+          <button id="btn-clear-chat" class="text-xs text-slate-500 hover:text-slate-300 transition px-2 py-1 bg-slate-950 border border-slate-800 rounded-lg">
+            Xóa màn hình
+          </button>
+        </div>
+
+        <!-- Khung chat log (Minecraft style) -->
+        <div id="chat-log" class="flex-1 bg-slate-950 border border-slate-850 rounded-xl p-4 overflow-y-auto font-mono text-sm space-y-2.5 scrollbar-thin">
+          <div class="text-slate-500 italic text-xs">Hệ thống: Chưa khởi động bot để ghi nhật ký chat...</div>
+        </div>
+
+        <!-- Chat Input Form -->
+        <div class="mt-4 flex gap-2 shrink-0">
+          <input type="text" id="chat-input" disabled placeholder="Kết nối bot để bắt đầu nhắn tin..." 
+                 class="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition disabled:opacity-55 disabled:cursor-not-allowed">
+          <button id="btn-send-chat" disabled
+                  class="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2.5 rounded-lg transition active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center shadow-[0_0_15px_rgba(37,99,235,0.2)]">
+            Gửi
+          </button>
+        </div>
+      </section>
+    </div>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-900 bg-slate-950 py-4 shrink-0">
+    <div class="max-w-7xl mx-auto px-4 text-center text-xs text-slate-600">
+      Minecraft Bot Control Panel - Phát triển bởi Antigravity. Node.js + Socket.io + Mineflayer.
+    </div>
+  </footer>
+
+  <!-- Socket.io Client qua CDN -->
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <!-- Logic JS của ứng dụng -->
+  <script src="app.js"></script>
+</body>
+</html>

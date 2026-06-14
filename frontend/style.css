@@ -1,0 +1,57 @@
+/* Các tùy chỉnh CSS bổ sung cho giao diện Web Control Panel */
+
+/* Tùy chỉnh thanh cuộn cho khu vực Chat Log (Minecraft style) */
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.6); /* slate-900 */
+  border-radius: 4px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: rgba(51, 65, 85, 0.8); /* slate-700 */
+  border-radius: 4px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: rgba(71, 85, 105, 1); /* slate-600 */
+}
+
+/* Kiểu chữ tùy biến cho các ô thông số tọa độ */
+span#coord-x, span#coord-y, span#coord-z {
+  text-shadow: 0 0 8px rgba(255, 255, 255, 0.05);
+}
+
+/* Kiểu dáng thanh máu và thức ăn có hiệu ứng chuyển tiếp mượt mà */
+#stat-health-bar, #stat-food-bar {
+  transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.3s ease;
+}
+
+/* Animation nhấp nháy cho badge offline/error */
+@keyframes pulse-slow {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+.animate-pulse-slow {
+  animation: pulse-slow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Đảm bảo chiều cao tối đa của chatbox tự co giãn theo màn hình */
+#chat-log {
+  max-height: calc(100vh - 380px);
+  min-height: 220px;
+}
+
+@media (max-width: 1024px) {
+  #chat-log {
+    max-height: 350px;
+  }
+}
