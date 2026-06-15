@@ -1,8 +1,50 @@
+// Hook minecraft-data to support Minecraft 26.x and 26.0 versions
+try {
+  require('minecraft-data');
+  const mcDataModule = require.cache[require.resolve('minecraft-data')];
+  if (mcDataModule) {
+    const originalExport = mcDataModule.exports;
+    const wrappedExport = function (mcVersion, preNetty) {
+      let targetVersion = mcVersion;
+      if (mcVersion === '26.0') {
+        targetVersion = '26.1';
+      }
+      const isVersion26 = typeof targetVersion === 'string' && targetVersion.startsWith('26');
+      if (isVersion26) {
+        const verMeta = originalExport.versionsByMinecraftVersion.pc[targetVersion];
+        if (verMeta) {
+          const baseData = originalExport('1.21.11', preNetty);
+          if (baseData) {
+            const newData = {
+              ...baseData,
+              version: Object.assign({}, baseData.version, {
+                minecraftVersion: targetVersion,
+                version: verMeta.version,
+                dataVersion: verMeta.dataVersion,
+                majorVersion: '1.21' // Fallback to 1.21 majorVersion for compatibility
+              })
+            };
+            const supportFeature = require('minecraft-data/lib/supportsFeature');
+            newData.supportFeature = supportFeature(newData.version, originalExport.versions.pc);
+            return newData;
+          }
+        }
+      }
+      return originalExport(mcVersion, preNetty);
+    };
+    Object.assign(wrappedExport, originalExport);
+    mcDataModule.exports = wrappedExport;
+  }
+} catch (err) {
+  console.error('[Cảnh báo] Lỗi khi hook minecraft-data:', err.message);
+}
+
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
 const mineflayer = require('mineflayer');
+
 
 // Hàm phân tích và đệ quy trích xuất chuỗi từ bất kỳ đối tượng Chat Component / NBT nào của Minecraft
 function extractAllStrings(obj) {
