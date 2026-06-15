@@ -63,7 +63,24 @@ function extractAllStrings(obj) {
       return extractAllStrings(obj.value);
     }
     
-    // Nếu là Chat Component JSON chuẩn
+    // Nếu là Chat Component JSON chuẩn với translate
+    if (obj.translate !== undefined && typeof obj.translate === 'string') {
+      let result = '';
+      if (obj.translate === 'disconnect.genericReason' && obj.with) {
+        result = extractAllStrings(obj.with);
+      } else {
+        result = obj.translate;
+        if (obj.with) {
+          result += ': ' + extractAllStrings(obj.with);
+        }
+      }
+      if (Array.isArray(obj.extra)) {
+        result += extractAllStrings(obj.extra);
+      }
+      return result;
+    }
+
+    // Nếu là Chat Component JSON chuẩn với text
     if (obj.text !== undefined && typeof obj.text === 'string') {
       let result = obj.text;
       if (Array.isArray(obj.extra)) {
