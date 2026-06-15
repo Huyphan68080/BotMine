@@ -434,6 +434,7 @@ io.on('connection', (socket) => {
     // Lưu các tên thực thể đã log để tránh gửi trùng lặp
     const loggedEntityNames = {};
     let loginTimeoutTimer = null;
+    let hasLoggedIn = false;
 
     function handleMapPacket(packet) {
       if (!packet) return;
@@ -552,7 +553,12 @@ io.on('connection', (socket) => {
     }
 
     function handleBotDisconnect(reasonText, isError = false) {
-      console.log(`[Bot] handleBotDisconnect [${socketId}] - Lý do: ${reasonText}. Trạng thái timer: ${reconnectTimers[socketId] ? 'Đang có' : 'Chưa có'}`);
+      let finalReasonText = reasonText;
+      if (!hasLoggedIn && reasonText.includes('socketClosed')) {
+        finalReasonText = 'Lỗi: Server đóng kết nối ngay lập tức (Có thể do sai phiên bản, sai loại Auth hoặc bị chặn IP/Anti-bot)';
+      }
+
+      console.log(`[Bot] handleBotDisconnect [${socketId}] - Lý do: ${finalReasonText}. Trạng thái timer: ${reconnectTimers[socketId] ? 'Đang có' : 'Chưa có'}`);
       if (loginTimeoutTimer) {
         clearTimeout(loginTimeoutTimer);
         loginTimeoutTimer = null;
@@ -576,25 +582,25 @@ io.on('connection', (socket) => {
       // Nếu người dùng bật Auto Reconnect, thực hiện đếm ngược kết nối lại
       if (autoReconnect) {
         // Nếu bị Timeout 25s, không tự động kết nối lại để tránh spam làm tăng thời gian khóa của proxy
-        if (reasonText.includes('Timeout 25s')) {
+        if (finalReasonText.includes('Timeout 25s')) {
           console.log(`[Bot] Ngắt kết nối do Timeout 25s. Tạm dừng tự động kết nối lại để tránh bị khóa IP/Tên.`);
           socket.emit('bot-status', { 
             status: 'error', 
-            message: `${reasonText}. Đã tắt Auto-Reconnect. Vui lòng đổi tên Bot hoặc đợi 1 phút.` 
+            message: `${finalReasonText}. Đã tắt Auto-Reconnect. Vui lòng đổi tên Bot hoặc đợi 1 phút.` 
           });
           return;
         }
 
         if (!reconnectTimers[socketId]) {
           // Xác định thời gian chờ kết nối lại (mặc định 10s, nếu bị kick để rejoin thì chờ 25s để tránh rate limit của Bungee/TCPShield)
-          const isRejoinKick = reasonText.toLowerCase().includes('rejoin') || reasonText.toLowerCase().includes('solved');
+          const isRejoinKick = finalReasonText.toLowerCase().includes('rejoin') || finalReasonText.toLowerCase().includes('solved');
           const delayMs = isRejoinKick ? 25000 : 10000;
           const delaySec = delayMs / 1000;
 
           console.log(`[Bot] Bot của ${socketId} bị ngắt kết nối. Đang tự động kết nối lại sau ${delaySec} giây...`);
           socket.emit('bot-status', { 
             status: 'connecting', 
-            message: `${reasonText}. Tự động kết nối lại sau ${delaySec}s...` 
+            message: `${finalReasonText}. Tự động kết nối lại sau ${delaySec}s...` 
           });
 
           reconnectTimers[socketId] = setTimeout(() => {
@@ -607,7 +613,7 @@ io.on('connection', (socket) => {
       } else {
         socket.emit('bot-status', { 
           status: isError ? 'error' : 'offline', 
-          message: reasonText 
+          message: finalReasonText 
         });
       }
     }
@@ -616,6 +622,7 @@ io.on('connection', (socket) => {
 
     // 0. Khi bot đã đăng nhập thành công vào server (chưa spawn)
     bot.on('login', () => {
+      hasLoggedIn = true;
       if (loginTimeoutTimer) {
         clearTimeout(loginTimeoutTimer);
         loginTimeoutTimer = null;
