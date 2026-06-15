@@ -44,6 +44,8 @@ const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
 const mineflayer = require('mineflayer');
+const prismarineRegistry = require('prismarine-registry');
+const prismarineChat = require('prismarine-chat');
 
 
 // Hàm phân tích và đệ quy trích xuất chuỗi từ bất kỳ đối tượng Chat Component / NBT nào của Minecraft
@@ -115,20 +117,50 @@ function extractAllStrings(obj) {
   return '';
 }
 
-function parseKickReason(reason) {
-  if (!reason) return 'Bị kick không rõ lý do';
-  if (typeof reason === 'string') {
-    try {
-      const parsed = JSON.parse(reason);
-      return extractAllStrings(parsed);
-    } catch (e) {
-      return reason;
+// Hàm chuyển đổi Chat Component sang chuỗi văn bản hoàn chỉnh sử dụng thư viện prismarine-chat chuẩn
+function chatToString(component, bot) {
+  if (component === null || component === undefined) return '';
+  
+  if (typeof component === 'object' && typeof component.toString === 'function') {
+    const str = component.toString();
+    if (str && str !== '[object Object]') {
+      return str;
     }
   }
-  return extractAllStrings(reason);
+
+  let parsed = component;
+  if (typeof component === 'string') {
+    try {
+      parsed = JSON.parse(component);
+    } catch (e) {
+      return component;
+    }
+  }
+
+  try {
+    const registry = (bot && bot.registry) || prismarineRegistry('1.21.1');
+    const ChatMessage = prismarineChat(registry);
+    const msg = new ChatMessage(parsed);
+    const str = msg.toString();
+    if (str) {
+      if (str === 'disconnect.genericReason' || str === 'disconnect.quitting') {
+        return 'Mất kết nối đột ngột hoặc Server chủ động đóng kết nối';
+      }
+      return str;
+    }
+  } catch (err) {
+    // Fallback
+  }
+
+  return extractAllStrings(parsed);
 }
 
-function getEntityName(entity) {
+function parseKickReason(reason, bot) {
+  if (!reason) return 'Bị kick không rõ lý do';
+  return chatToString(reason, bot);
+}
+
+function getEntityName(entity, bot) {
   if (!entity) return null;
   let name = null;
   if (typeof entity.getCustomName === 'function') {
@@ -139,20 +171,7 @@ function getEntityName(entity) {
   if (!name && entity.displayName) name = entity.displayName;
   
   if (!name) return null;
-  
-  if (typeof name === 'object') {
-    return extractAllStrings(name);
-  }
-  
-  if (typeof name === 'string') {
-    try {
-      const parsed = JSON.parse(name);
-      return extractAllStrings(parsed);
-    } catch (e) {
-      return name;
-    }
-  }
-  return String(name);
+  return chatToString(name, bot);
 }
 
 // Hàm tự động phát hiện và giải quyết Captcha dạng văn bản bằng Regex
@@ -436,6 +455,8 @@ const botConfigs = {};
 const reconnectTimers = {};
 // Lưu trữ bộ quét captcha định kỳ (bản đồ, biển hiệu, hologram)
 const scanIntervals = {};
+// Lưu trữ bộ quét radar thời gian thực (blocks và entities)
+const radarIntervals = {};
 
 io.on('connection', (socket) => {
   console.log(`[Socket] Client kết nối mới: ${socket.id}`);
@@ -481,7 +502,7 @@ io.on('connection', (socket) => {
       // Bỏ qua thực thể của chính bot
       if (bot.entity && entity.id === bot.entity.id) return;
 
-      const name = getEntityName(entity);
+      const name = getEntityName(entity, bot);
       if (!name) return;
       
       const cleanName = name.trim();
@@ -524,6 +545,12 @@ io.on('connection', (socket) => {
     if (scanIntervals[socketId]) {
       clearInterval(scanIntervals[socketId]);
       delete scanIntervals[socketId];
+    }
+
+    // Xóa bộ quét radar cũ nếu có
+    if (radarIntervals[socketId]) {
+      clearInterval(radarIntervals[socketId]);
+      delete radarIntervals[socketId];
     }
 
     socket.emit('bot-status', { status: 'connecting', message: 'Đang kết nối tới server Minecraft...' });
@@ -591,6 +618,12 @@ io.on('connection', (socket) => {
       if (scanIntervals[socketId]) {
         clearInterval(scanIntervals[socketId]);
         delete scanIntervals[socketId];
+      }
+
+      // Xóa bộ quét radar
+      if (radarIntervals[socketId]) {
+        clearInterval(radarIntervals[socketId]);
+        delete radarIntervals[socketId];
       }
 
       // Nếu socket client đã ngắt kết nối khỏi server backend, giải phóng tài nguyên ngay
@@ -693,6 +726,94 @@ io.on('connection', (socket) => {
         bot._client.on('map_data', handleMapPacket);
         bot._client.on('map', handleMapPacket);
       }
+
+      // Khởi tạo quét radar thời gian thực gửi lên frontend mỗi 500ms
+      if (radarIntervals[socketId]) {
+        clearInterval(radarIntervals[socketId]);
+      }
+      radarIntervals[socketId] = setInterval(() => {
+        if (!activeBots[socketId] || !bot.entity) return;
+        
+        try {
+          const botPos = bot.entity.position;
+          
+          // 1. Quét blocks xung quanh (lưới 17x17)
+          const blocks = [];
+          const range = 8; // -8 đến +8 là 17 ô
+          
+          for (let dz = -range; dz <= range; dz++) {
+            for (let dx = -range; dx <= range; dx++) {
+              let blockType = 0; // 0: air/void
+              
+              // Quét từ Y - 1 (dưới chân) xuống Y - 5 để tìm block sàn
+              for (let dy = -1; dy >= -5; dy--) {
+                const pos = botPos.offset(dx, dy, dz);
+                const block = bot.blockAt(pos);
+                
+                if (block && block.name && block.name !== 'air') {
+                  const bName = block.name.toLowerCase();
+                  if (bName.includes('grass') || bName.includes('leaves') || bName.includes('dandelion') || bName.includes('poppy') || bName.includes('fern') || bName.includes('sapling')) {
+                    blockType = 1; // 1: cỏ/lá
+                  } else if (bName.includes('stone') || bName.includes('cobble') || bName.includes('coal') || bName.includes('iron') || bName.includes('gold') || bName.includes('diamond') || bName.includes('redstone') || bName.includes('copper') || bName.includes('lapis') || bName.includes('emerald') || bName.includes('deepslate') || bName.includes('andesite') || bName.includes('diorite') || bName.includes('granite') || bName.includes('brick') || bName.includes('obsidian')) {
+                    blockType = 2; // 2: đá/quặng/gạch
+                  } else if (bName.includes('water')) {
+                    blockType = 3; // 3: nước
+                  } else if (bName.includes('lava')) {
+                    blockType = 4; // 4: dung nham
+                  } else if (bName.includes('wood') || bName.includes('log') || bName.includes('plank') || bName.includes('fence') || bName.includes('door') || bName.includes('chest')) {
+                    blockType = 5; // 5: gỗ
+                  } else {
+                    blockType = 6; // 6: khối rắn khác
+                  }
+                  break; // Tìm thấy sàn, chuyển sang ô tiếp theo
+                }
+              }
+              blocks.push(blockType);
+            }
+          }
+          
+          // 2. Quét thực thể xung quanh (mobs/players)
+          const entities = [];
+          if (bot.entities) {
+            Object.values(bot.entities).forEach(entity => {
+              if (!entity || entity.id === bot.entity.id) return;
+              
+              const relX = entity.position.x - botPos.x;
+              const relZ = entity.position.z - botPos.z;
+              
+              // Khoảng cách euclidean tương đối trong khoảng quét radar
+              if (Math.abs(relX) <= 16 && Math.abs(relZ) <= 16) {
+                let category = 'other';
+                if (entity.type === 'player') {
+                  category = 'player';
+                } else if (entity.type === 'mob' || entity.type === 'monster') {
+                  const passiveMobs = ['cow', 'pig', 'sheep', 'chicken', 'rabbit', 'horse', 'donkey', 'mule', 'llama', 'villager', 'iron_golem', 'squid', 'glow_squid', 'bat', 'bee', 'cat', 'dog', 'wolf', 'fox', 'panda', 'parrot', 'polar_bear', 'strider', 'turtle', 'axolotl'];
+                  const name = (entity.name || '').toLowerCase();
+                  const isPassive = passiveMobs.some(m => name.includes(m));
+                  category = isPassive ? 'passive' : 'hostile';
+                }
+                
+                entities.push({
+                  relX: Math.round(relX * 10) / 10,
+                  relZ: Math.round(relZ * 10) / 10,
+                  name: entity.displayName || entity.name || entity.type,
+                  category: category
+                });
+              }
+            });
+          }
+          
+          // Gửi gói dữ liệu radar lên frontend
+          socket.emit('bot-radar', {
+            yaw: bot.entity.yaw,
+            blocks: blocks,
+            entities: entities
+          });
+          
+        } catch (err) {
+          // Bỏ qua lỗi quét radar để tránh crash bot
+        }
+      }, 500);
 
       // Bắt đầu quét định kỳ để tìm biển báo, bản đồ và hologram ngay khi đăng nhập
       if (scanIntervals[socketId]) {
@@ -909,10 +1030,7 @@ io.on('connection', (socket) => {
     // 5.6. Lắng nghe tiêu đề (Title) để hiển thị Captcha hoặc thông tin từ server
     bot.on('title', (titleText, type) => {
       if (!titleText) return;
-      let text = titleText;
-      if (typeof text === 'object') {
-        text = extractAllStrings(text);
-      }
+      const text = chatToString(titleText, bot);
       if (!text.trim()) return;
       
       console.log(`[Bot] Nhận tiêu đề (${type}): ${text}`);
@@ -930,11 +1048,7 @@ io.on('connection', (socket) => {
     // 5.7. Lắng nghe ActionBar (thông tin trên thanh công cụ)
     bot.on('actionBar', (message) => {
       if (!message) return;
-      let text = message;
-      if (typeof text === 'object') {
-        if (typeof text.toString === 'function') text = text.toString();
-        else text = extractAllStrings(text);
-      }
+      const text = chatToString(message, bot);
       if (!text.trim()) return;
       
       console.log(`[Bot] Nhận ActionBar: ${text}`);
@@ -952,11 +1066,7 @@ io.on('connection', (socket) => {
     // 5.8. Lắng nghe BossBar (thanh Boss trên cùng)
     bot.on('bossBarCreated', (bossBar) => {
       if (!bossBar || !bossBar.title) return;
-      let text = bossBar.title;
-      if (typeof text === 'object') {
-        if (typeof text.toString === 'function') text = text.toString();
-        else text = extractAllStrings(text);
-      }
+      const text = chatToString(bossBar.title, bot);
       if (!text.trim()) return;
       
       console.log(`[Bot] Nhận BossBar mới: ${text}`);
@@ -973,11 +1083,7 @@ io.on('connection', (socket) => {
 
     bot.on('bossBarUpdated', (bossBar) => {
       if (!bossBar || !bossBar.title) return;
-      let text = bossBar.title;
-      if (typeof text === 'object') {
-        if (typeof text.toString === 'function') text = text.toString();
-        else text = extractAllStrings(text);
-      }
+      const text = chatToString(bossBar.title, bot);
       if (!text.trim()) return;
       
       console.log(`[Bot] Nhận cập nhật BossBar: ${text}`);
@@ -1028,7 +1134,7 @@ io.on('connection', (socket) => {
 
     // 6. Khi bot bị kick khỏi server
     bot.on('kicked', (reason) => {
-      const parsedReason = parseKickReason(reason);
+      const parsedReason = parseKickReason(reason, bot);
       console.log(`[Bot] Bot bị kick khỏi server. Lý do: ${parsedReason}`);
       handleBotDisconnect(`Bot bị kick! Lý do: ${parsedReason}`);
     });
@@ -1114,6 +1220,12 @@ io.on('connection', (socket) => {
     if (reconnectTimers[socketId]) {
       clearTimeout(reconnectTimers[socketId]);
       delete reconnectTimers[socketId];
+    }
+
+    // Xóa bộ quét radar
+    if (radarIntervals[socketId]) {
+      clearInterval(radarIntervals[socketId]);
+      delete radarIntervals[socketId];
     }
 
     const bot = activeBots[socketId];

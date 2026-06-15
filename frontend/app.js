@@ -39,6 +39,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnSendChat = document.getElementById('btn-send-chat');
   const btnClearChat = document.getElementById('btn-clear-chat');
 
+  // Minimap Canvas & Overlay
+  const minimapCanvas = document.getElementById('minimap-canvas');
+  const minimapCtx = minimapCanvas ? minimapCanvas.getContext('2d') : null;
+  const minimapOverlay = document.getElementById('minimap-overlay-status');
+
   // --- Khởi tạo Địa chỉ Backend URL ---
   // Lấy URL lưu từ localStorage hoặc mặc định là server hiện tại hoặc localhost:3000
   let savedBackendUrl = localStorage.getItem('mc_bot_backend_url');
@@ -345,11 +350,139 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
 
-    // 5. Ẩn captcha khi bot ngắt kết nối
+    // 5. Ẩn captcha và hiển thị lớp phủ radar khi bot ngắt kết nối
     socket.on('bot-status', (data) => {
       if (data.status === 'offline' || data.status === 'error') {
         const captchaContainer = document.getElementById('captcha-container');
         if (captchaContainer) captchaContainer.classList.add('hidden');
+        
+        if (minimapOverlay) {
+          minimapOverlay.classList.remove('hidden');
+          const spanText = minimapOverlay.querySelector('span');
+          if (spanText) {
+            spanText.textContent = data.status === 'error' ? 'Lỗi kết nối bot!' : 'Chờ bot kết nối trực tiếp...';
+          }
+        }
+      }
+    });
+
+    // 6. Nhận dữ liệu radar quét thời gian thực
+    socket.on('bot-radar', (data) => {
+      if (!minimapCanvas || !minimapCtx) return;
+      
+      // Ẩn lớp phủ trạng thái
+      if (minimapOverlay) {
+        minimapOverlay.classList.add('hidden');
+      }
+      
+      const { yaw, blocks, entities } = data;
+      const width = minimapCanvas.width;
+      const height = minimapCanvas.height;
+      
+      // Xóa canvas
+      minimapCtx.fillStyle = '#020617'; // slate-950
+      minimapCtx.fillRect(0, 0, width, height);
+      
+      // Lưới block có kích thước 17x17
+      const gridSize = 17;
+      const tileSize = width / gridSize;
+      
+      // Màu sắc tương ứng với blockType
+      const colors = {
+        0: '#020617', // Air/Void: Slate-950
+        1: '#166534', // Grass/Leaves: Green-800
+        2: '#334155', // Stone/Ores: Slate-700
+        3: '#1e40af', // Water: Blue-800
+        4: '#991b1b', // Lava: Red-800
+        5: '#78350f', // Wood: Amber-900
+        6: '#475569'  // Other solid: Slate-600
+      };
+      
+      // Vẽ blocks
+      if (blocks && blocks.length === gridSize * gridSize) {
+        for (let r = 0; r < gridSize; r++) {
+          for (let c = 0; c < gridSize; c++) {
+            const blockType = blocks[r * gridSize + c];
+            minimapCtx.fillStyle = colors[blockType] || colors[0];
+            minimapCtx.fillRect(c * tileSize, r * tileSize, tileSize - 0.5, tileSize - 0.5);
+          }
+        }
+      }
+      
+      // Vẽ các vòng tròn radar đồng tâm cho đẹp mắt và định hướng
+      minimapCtx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+      minimapCtx.lineWidth = 1;
+      
+      const centerX = width / 2;
+      const centerY = height / 2;
+      minimapCtx.beginPath();
+      minimapCtx.arc(centerX, centerY, width / 4, 0, 2 * Math.PI);
+      minimapCtx.stroke();
+      minimapCtx.beginPath();
+      minimapCtx.arc(centerX, centerY, width / 2 - 5, 0, 2 * Math.PI);
+      minimapCtx.stroke();
+      
+      // Vẽ các thực thể (Entities)
+      const maxRange = 8.5; // Kích thước bán kính lưới block
+      
+      if (entities && Array.isArray(entities)) {
+        entities.forEach(entity => {
+          const { relX, relZ, name, category } = entity;
+          
+          const canvasX = centerX + (relX / maxRange) * (width / 2);
+          const canvasY = centerY + (relZ / maxRange) * (height / 2);
+          
+          if (canvasX >= 0 && canvasX <= width && canvasY >= 0 && canvasY <= height) {
+            let color = '#94a3b8'; // Mặc định: xám (other)
+            if (category === 'player') {
+              color = '#22c55e'; // Player: Xanh lá sáng
+            } else if (category === 'hostile') {
+              color = '#f43f5e'; // Hostile: Hồng đỏ rực
+            } else if (category === 'passive') {
+              color = '#fbbf24'; // Passive: Vàng sáng
+            }
+            
+            // Vẽ chấm thực thể
+            minimapCtx.fillStyle = color;
+            minimapCtx.beginPath();
+            minimapCtx.arc(canvasX, canvasY, 4, 0, 2 * Math.PI);
+            minimapCtx.fill();
+            
+            // Viết nhãn tên thực thể nhỏ phía trên chấm tròn nếu ở gần bot
+            const dist = Math.sqrt(relX * relX + relZ * relZ);
+            if (dist < 6) {
+              minimapCtx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+              minimapCtx.font = '8px sans-serif';
+              minimapCtx.textAlign = 'center';
+              const shortName = name.length > 8 ? name.substring(0, 7) + '..' : name;
+              minimapCtx.fillText(shortName, canvasX, canvasY - 6);
+            }
+          }
+        });
+      }
+      
+      // Vẽ Bot ở trung tâm (màu Cyan nổi bật)
+      minimapCtx.fillStyle = '#06b6d4'; // Cyan-500
+      minimapCtx.strokeStyle = '#22d3ee'; // Cyan-400
+      minimapCtx.lineWidth = 2;
+      minimapCtx.beginPath();
+      minimapCtx.arc(centerX, centerY, 5, 0, 2 * Math.PI);
+      minimapCtx.fill();
+      minimapCtx.stroke();
+      
+      // Vẽ hướng nhìn của Bot (tam giác/mũi tên hướng theo yaw)
+      if (yaw !== undefined) {
+        const angle = -yaw - Math.PI; // Hướng nhìn trên canvas
+        const dirX = Math.sin(angle);
+        const dirY = Math.cos(angle);
+        
+        minimapCtx.fillStyle = '#22d3ee';
+        minimapCtx.beginPath();
+        minimapCtx.moveTo(centerX + dirX * 12, centerY + dirY * 12);
+        minimapCtx.lineTo(centerX + Math.sin(angle - 2.5) * 6, centerY + Math.cos(angle - 2.5) * 6);
+        minimapCtx.lineTo(centerX + Math.sin(angle + 2.5) * 6, centerY + Math.cos(angle + 2.5) * 6);
+        minimapCtx.closePath();
+        minimapCtx.fill();
       }
     });
   }
