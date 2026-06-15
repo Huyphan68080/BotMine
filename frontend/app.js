@@ -39,10 +39,51 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnSendChat = document.getElementById('btn-send-chat');
   const btnClearChat = document.getElementById('btn-clear-chat');
 
+  // Lịch sử Chat & Kênh Chat Tabs
+  const chatHistory = [];
+  let activeChatTab = 'all'; // 'all', 'public', 'private', 'system'
+  let unreadPrivateCount = 0;
+
   // Minimap Canvas & Overlay
   const minimapCanvas = document.getElementById('minimap-canvas');
   const minimapCtx = minimapCanvas ? minimapCanvas.getContext('2d') : null;
   const minimapOverlay = document.getElementById('minimap-overlay-status');
+
+  // Camera 3D Elements
+  const cameraFrame = document.getElementById('camera-frame');
+  const cameraOverlay = document.getElementById('camera-overlay');
+  const cameraStatusText = document.getElementById('camera-status-text');
+
+  // --- Khởi động đếm giờ chơi (Stopwatch) ---
+  let playTimeTimer = null;
+  let playTimeSeconds = 0;
+
+  function startPlayTime() {
+    stopPlayTime();
+    playTimeSeconds = 0;
+    updatePlayTimeDisplay();
+    playTimeTimer = setInterval(() => {
+      playTimeSeconds++;
+      updatePlayTimeDisplay();
+    }, 1000);
+  }
+
+  function stopPlayTime() {
+    if (playTimeTimer) {
+      clearInterval(playTimeTimer);
+      playTimeTimer = null;
+    }
+  }
+
+  function updatePlayTimeDisplay() {
+    const hours = String(Math.floor(playTimeSeconds / 3600)).padStart(2, '0');
+    const minutes = String(Math.floor((playTimeSeconds % 3600) / 60)).padStart(2, '0');
+    const secs = String(playTimeSeconds % 60).padStart(2, '0');
+    const playTimeLabel = document.getElementById('play-time');
+    if (playTimeLabel) {
+      playTimeLabel.textContent = `${hours}:${minutes}:${secs}`;
+    }
+  }
 
   // --- Khởi tạo Địa chỉ Backend URL ---
   // Lấy URL lưu từ localStorage hoặc mặc định là server hiện tại hoặc localhost:3000
@@ -115,10 +156,10 @@ document.addEventListener('DOMContentLoaded', () => {
   function updateBackendConnectionStatus(status, message) {
     socketText.textContent = message;
     if (status === 'connected') {
-      socketDot.className = 'relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500';
-      socketPulse.className = 'animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75';
+      socketDot.className = 'relative inline-flex rounded-full h-1.5 w-1.5 bg-purpleAccent';
+      socketPulse.className = 'animate-ping absolute inline-flex h-full w-full rounded-full bg-purpleGlow opacity-75';
     } else {
-      socketDot.className = 'relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500';
+      socketDot.className = 'relative inline-flex rounded-full h-1.5 w-1.5 bg-red-500';
       socketPulse.className = 'animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75';
     }
   }
@@ -129,47 +170,52 @@ document.addEventListener('DOMContentLoaded', () => {
   function updateBotStatus(status, message) {
     botStatusDesc.textContent = message;
     
-    // Reset các class màu sắc trước khi gán
-    botPulseRing.className = 'animate-ping absolute inline-flex h-full w-full rounded-full opacity-75';
-    botDot.className = 'relative inline-flex rounded-full h-3.5 w-3.5';
-
     switch (status) {
       case 'online':
         isBotOnline = true;
         botStatusText.textContent = 'ONLINE';
-        botStatusText.className = 'text-lg font-bold text-emerald-400';
-        botPulseRing.classList.add('bg-emerald-400');
-        botDot.classList.add('bg-emerald-500');
+        botStatusText.className = 'text-xs font-bold text-purpleAccent drop-shadow-[0_0_8px_rgba(121,70,240,0.4)] tracking-wider';
+        botPulseRing.className = 'animate-ping absolute inline-flex h-full w-full rounded-full bg-purpleGlow opacity-75';
+        botDot.className = 'relative inline-flex rounded-full h-2.5 w-2.5 bg-purpleAccent';
         
+        // Bắt đầu tính giờ chơi
+        startPlayTime();
+
         // Điều khiển nút & form
         btnConnectBot.disabled = true;
-        btnConnectBot.className = 'w-full bg-emerald-800 text-emerald-400 border border-emerald-700/50 cursor-not-allowed font-semibold py-2.5 px-4 rounded-lg flex items-center justify-center gap-2';
+        btnConnectBot.className = 'bg-zinc-900 text-zinc-600 border border-zinc-850 cursor-not-allowed font-bold uppercase tracking-widest text-[11px] px-5 py-2.5 rounded-lg flex items-center gap-1.5 shadow-none';
         btnDisconnectBot.disabled = false;
-        btnDisconnectBot.className = 'w-full bg-rose-600 hover:bg-rose-500 text-white font-semibold py-2.5 px-4 rounded-lg transition active:scale-[0.98] flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(239,68,68,0.2)]';
+        btnDisconnectBot.className = 'bg-red-600 hover:bg-red-500 text-white font-bold uppercase tracking-widest text-[11px] px-5 py-2.5 rounded-lg transition active:scale-95 flex items-center gap-1.5 shadow-[0_0_15px_rgba(220,38,38,0.3)]';
         
         // Bật chat input
         chatInput.disabled = false;
-        chatInput.placeholder = 'Nhập tin nhắn để Bot chat...';
+        chatInput.placeholder = 'Nhập tin nhắn / lệnh gửi tới server...';
         btnSendChat.disabled = false;
+        btnSendChat.className = 'bg-purpleAccent hover:bg-purpleGlow text-white font-bold uppercase tracking-widest text-[9px] px-3.5 py-1.5 rounded transition active:scale-95 flex items-center justify-center shadow-[0_0_12px_rgba(121,70,240,0.3)]';
         break;
 
       case 'connecting':
         isBotOnline = false;
         botStatusText.textContent = 'CONNECTING';
-        botStatusText.className = 'text-lg font-bold text-amber-400';
-        botPulseRing.classList.add('bg-amber-400');
-        botDot.classList.add('bg-amber-500');
+        botStatusText.className = 'text-xs font-bold text-yellow-500 tracking-wider';
+        botPulseRing.className = 'animate-ping absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75';
+        botDot.className = 'relative inline-flex rounded-full h-2.5 w-2.5 bg-yellow-550';
+
+        if (cameraStatusText) {
+          cameraStatusText.textContent = 'Đang khởi chạy camera 3D...';
+        }
 
         // Điều khiển nút & form
         btnConnectBot.disabled = true;
-        btnConnectBot.className = 'w-full bg-slate-800 text-slate-500 cursor-not-allowed font-semibold py-2.5 px-4 rounded-lg flex items-center justify-center gap-2';
+        btnConnectBot.className = 'bg-zinc-900 text-zinc-600 border border-zinc-850 cursor-not-allowed font-bold uppercase tracking-widest text-[11px] px-5 py-2.5 rounded-lg flex items-center gap-1.5 shadow-none';
         btnDisconnectBot.disabled = false; // Vẫn cho phép ngắt kết nối khi đang cố gắng kết nối
-        btnDisconnectBot.className = 'w-full bg-rose-600 hover:bg-rose-500 text-white font-semibold py-2.5 px-4 rounded-lg transition active:scale-[0.98] flex items-center justify-center gap-2';
+        btnDisconnectBot.className = 'bg-red-600 hover:bg-red-500 text-white font-bold uppercase tracking-widest text-[11px] px-5 py-2.5 rounded-lg transition active:scale-95 flex items-center gap-1.5';
         
         // Tắt chat input
         chatInput.disabled = true;
-        chatInput.placeholder = 'Đang kết nối bot...';
+        chatInput.placeholder = 'Đang kết nối bot tới server...';
         btnSendChat.disabled = true;
+        btnSendChat.className = 'bg-zinc-900 text-zinc-650 border border-zinc-850 font-bold uppercase tracking-widest text-[9px] px-3.5 py-1.5 rounded cursor-not-allowed flex items-center justify-center';
         break;
 
       case 'error':
@@ -177,23 +223,35 @@ document.addEventListener('DOMContentLoaded', () => {
       default:
         isBotOnline = false;
         botStatusText.textContent = status === 'error' ? 'ERROR' : 'OFFLINE';
-        botStatusText.className = status === 'error' ? 'text-lg font-bold text-rose-500' : 'text-lg font-bold text-slate-400';
-        botPulseRing.classList.add(status === 'error' ? 'bg-rose-400' : 'bg-slate-400');
-        botDot.classList.add(status === 'error' ? 'bg-rose-500' : 'bg-slate-500');
+        botStatusText.className = status === 'error' ? 'text-xs font-bold text-red-500 tracking-wider' : 'text-xs font-bold text-zinc-500 tracking-wider';
+        botPulseRing.className = status === 'error' ? 'animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75' : 'animate-ping absolute inline-flex h-full w-full rounded-full bg-zinc-650 opacity-75';
+        botDot.className = status === 'error' ? 'relative inline-flex rounded-full h-2.5 w-2.5 bg-red-550' : 'relative inline-flex rounded-full h-2.5 w-2.5 bg-zinc-650';
+
+        // Dừng đếm giờ chơi
+        stopPlayTime();
 
         // Reset các thông số stats về 0
         resetStats();
 
+        // Tắt tất cả toggle module hack khi ngắt kết nối
+        const killauraToggle = document.getElementById('killaura-toggle');
+        const autoeatToggle = document.getElementById('autoeat-toggle');
+        const autoarmorToggle = document.getElementById('autoarmor-toggle');
+        if (killauraToggle) killauraToggle.checked = false;
+        if (autoeatToggle) autoeatToggle.checked = false;
+        if (autoarmorToggle) autoarmorToggle.checked = false;
+
         // Điều khiển nút & form
         btnConnectBot.disabled = false;
-        btnConnectBot.className = 'w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-2.5 px-4 rounded-lg transition active:scale-[0.98] flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(16,185,129,0.2)]';
+        btnConnectBot.className = 'bg-purpleAccent hover:bg-purpleGlow text-white font-bold uppercase tracking-widest text-[11px] px-5 py-2.5 rounded-lg transition active:scale-95 flex items-center gap-1.5 shadow-[0_0_15px_rgba(121,70,240,0.3)]';
         btnDisconnectBot.disabled = true;
-        btnDisconnectBot.className = 'w-full bg-rose-600/50 text-rose-300 border border-rose-800/40 cursor-not-allowed font-semibold py-2.5 px-4 rounded-lg flex items-center justify-center gap-2';
+        btnDisconnectBot.className = 'bg-zinc-900 text-zinc-600 border border-zinc-850 font-bold uppercase tracking-widest text-[11px] px-5 py-2.5 rounded-lg cursor-not-allowed flex items-center gap-1.5';
         
         // Tắt chat input
         chatInput.disabled = true;
-        chatInput.placeholder = 'Kết nối bot để bắt đầu nhắn tin...';
+        chatInput.placeholder = 'Chờ kết nối bot...';
         btnSendChat.disabled = true;
+        btnSendChat.className = 'bg-zinc-900 text-zinc-650 border border-zinc-850 font-bold uppercase tracking-widest text-[9px] px-3.5 py-1.5 rounded cursor-not-allowed flex items-center justify-center';
         break;
     }
   }
@@ -277,8 +335,81 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Xóa màn hình nhật ký chat
   btnClearChat.addEventListener('click', () => {
-    chatLog.innerHTML = '<div class="text-slate-500 italic text-xs">Màn hình chat đã được xóa sạch.</div>';
+    chatHistory.length = 0; // Xóa sạch lịch sử lưu trữ
+    chatLog.innerHTML = '<div class="text-zinc-600 italic text-[11px]">Màn hình chat đã được xóa sạch.</div>';
   });
+
+  // --- Thiết lập chọn các Kênh Chat Tabs ---
+  const tabChatAll = document.getElementById('tab-chat-all');
+  const tabChatPublic = document.getElementById('tab-chat-public');
+  const tabChatPrivate = document.getElementById('tab-chat-private');
+  const tabChatSystem = document.getElementById('tab-chat-system');
+  const privateBadge = document.getElementById('private-badge');
+
+  const chatTabs = [
+    { el: tabChatAll, id: 'all' },
+    { el: tabChatPublic, id: 'public' },
+    { el: tabChatPrivate, id: 'private' },
+    { el: tabChatSystem, id: 'system' }
+  ];
+
+  chatTabs.forEach(tab => {
+    if (tab.el) {
+      tab.el.addEventListener('click', () => {
+        activeChatTab = tab.id;
+        
+        chatTabs.forEach(t => {
+          if (t.el) {
+            if (t.id === tab.id) {
+              t.el.classList.add('active', 'text-purpleAccent', 'border-b', 'border-purpleAccent');
+              t.el.classList.remove('text-zinc-550', 'hover:text-zinc-350');
+            } else {
+              t.el.classList.remove('active', 'text-purpleAccent', 'border-b', 'border-purpleAccent');
+              t.el.classList.add('text-zinc-550', 'hover:text-zinc-350');
+            }
+          }
+        });
+
+        // Nếu chuyển sang tab nhắn riêng, xóa badge đếm tin nhắn chưa đọc
+        if (tab.id === 'private') {
+          unreadPrivateCount = 0;
+          if (privateBadge) {
+            privateBadge.classList.add('hidden');
+            privateBadge.textContent = '0';
+          }
+        }
+
+        renderChatLog();
+      });
+    }
+  });
+
+  function renderChatLog() {
+    if (!chatLog) return;
+    chatLog.innerHTML = '';
+
+    if (chatHistory.length === 0) {
+      chatLog.innerHTML = '<div class="text-zinc-650 italic text-[11px]">Không có tin nhắn nào.</div>';
+      return;
+    }
+
+    const filtered = chatHistory.filter(msg => {
+      if (activeChatTab === 'all') return true;
+      if (activeChatTab === 'public') return msg.type === 'public' || msg.type === 'other' || msg.type === 'bot';
+      if (activeChatTab === 'private') return msg.type === 'private';
+      if (activeChatTab === 'system') return msg.type === 'system';
+      return false;
+    });
+
+    if (filtered.length === 0) {
+      chatLog.innerHTML = '<div class="text-zinc-650 italic text-[11px]">Không có tin nhắn phù hợp trong kênh này.</div>';
+      return;
+    }
+
+    filtered.forEach(msg => {
+      appendDivToChatLog(msg.sender, msg.message, msg.type, msg.time, msg.prefix, msg.receiver);
+    });
+  }
 
   // --- Lắng nghe các sự kiện socket từ Backend ---
   if (socket) {
@@ -304,7 +435,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } else if (percent > 20) {
           statHealthBar.className = 'bg-yellow-500 h-full rounded-full transition-all duration-350';
         } else {
-          statHealthBar.className = 'bg-red-600 h-full rounded-full transition-all duration-350 animate-pulse';
+          statHealthBar.className = 'bg-red-650 h-full rounded-full transition-all duration-350 animate-pulse';
         }
       }
 
@@ -326,16 +457,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 3. Nhận tin nhắn chat từ game
     socket.on('bot-chat', (data) => {
-      const { sender, message, time } = data;
+      const { sender, prefix, message, receiver, time, type } = data;
       
-      let type = 'other'; // Mặc định là người chơi khác
-      if (sender === 'System') {
-        type = 'system';
-      } else if (sender === botUsernameInput.value.trim() || sender === botStatusDesc.textContent.replace('Đã kết nối thành công với tên: ', '')) {
-        type = 'bot';
+      let chatType = type || 'other'; // 'public', 'private', 'system', 'other'
+      if (!type) {
+        if (sender === 'System') {
+          chatType = 'system';
+        } else if (sender === botUsernameInput.value.trim() || sender === botStatusDesc.textContent.replace('Đã kết nối thành công với tên: ', '')) {
+          chatType = 'bot';
+        }
       }
       
-      appendChatLog(sender, message, type, time);
+      appendChatLog(sender, message, chatType, time);
     });
 
     // 4. Nhận ảnh bản đồ captcha
@@ -350,7 +483,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
 
-    // 5. Ẩn captcha và hiển thị lớp phủ radar khi bot ngắt kết nối
+    // 5. Ẩn captcha, hiển thị lớp phủ radar, và reset camera khi bot ngắt kết nối
     socket.on('bot-status', (data) => {
       if (data.status === 'offline' || data.status === 'error') {
         const captchaContainer = document.getElementById('captcha-container');
@@ -362,6 +495,48 @@ document.addEventListener('DOMContentLoaded', () => {
           if (spanText) {
             spanText.textContent = data.status === 'error' ? 'Lỗi kết nối bot!' : 'Chờ bot kết nối trực tiếp...';
           }
+        }
+
+        // Reset camera 3D khi bot offline/error
+        if (cameraFrame) {
+          cameraFrame.src = '';
+          cameraFrame.classList.add('hidden');
+        }
+        if (cameraOverlay) {
+          cameraOverlay.classList.remove('hidden');
+        }
+        if (cameraStatusText) {
+          cameraStatusText.textContent = data.status === 'error' ? 'Lỗi kết nối bot!' : 'Chờ bot kết nối để mở camera 3D...';
+        }
+      }
+    });
+
+    // 6.5. Nhận URL camera 3D từ backend (prismarine-viewer qua localtunnel)
+    socket.on('camera_url', (url) => {
+      console.log('[Socket] Nhận camera_url:', url);
+      if (url && typeof url === 'string' && url.startsWith('http')) {
+        // Có URL hợp lệ -> hiển thị iframe, ẩn overlay
+        if (cameraFrame) {
+          const separator = url.includes('?') ? '&' : '?';
+          const freshUrl = `${url}${separator}t=${Date.now()}`;
+          cameraFrame.src = freshUrl;
+          cameraFrame.classList.remove('hidden');
+        }
+        if (cameraOverlay) {
+          cameraOverlay.classList.add('hidden');
+        }
+        appendChatLog('System', `Camera 3D đã sẵn sàng: ${url}`, 'system');
+      } else {
+        // URL trống hoặc không hợp lệ -> reset camera
+        if (cameraFrame) {
+          cameraFrame.src = '';
+          cameraFrame.classList.add('hidden');
+        }
+        if (cameraOverlay) {
+          cameraOverlay.classList.remove('hidden');
+        }
+        if (cameraStatusText) {
+          cameraStatusText.textContent = 'Không thể mở camera 3D (Lỗi tunnel)';
         }
       }
     });
@@ -428,6 +603,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (entities && Array.isArray(entities)) {
         entities.forEach(entity => {
           const { relX, relZ, name, category } = entity;
+          const entityName = name || 'Entity';
           
           const canvasX = centerX + (relX / maxRange) * (width / 2);
           const canvasY = centerY + (relZ / maxRange) * (height / 2);
@@ -451,19 +627,20 @@ document.addEventListener('DOMContentLoaded', () => {
             // Viết nhãn tên thực thể nhỏ phía trên chấm tròn nếu ở gần bot
             const dist = Math.sqrt(relX * relX + relZ * relZ);
             if (dist < 6) {
-              minimapCtx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-              minimapCtx.font = '8px sans-serif';
-              minimapCtx.textAlign = 'center';
-              const shortName = name.length > 8 ? name.substring(0, 7) + '..' : name;
-              minimapCtx.fillText(shortName, canvasX, canvasY - 6);
+               minimapCtx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+               minimapCtx.font = '8px sans-serif';
+               minimapCtx.textBaseline = 'bottom';
+               minimapCtx.textAlign = 'center';
+               const shortName = entityName.length > 8 ? entityName.substring(0, 7) + '..' : entityName;
+               minimapCtx.fillText(shortName, canvasX, canvasY - 6);
             }
           }
         });
       }
       
-      // Vẽ Bot ở trung tâm (màu Cyan nổi bật)
-      minimapCtx.fillStyle = '#06b6d4'; // Cyan-500
-      minimapCtx.strokeStyle = '#22d3ee'; // Cyan-400
+      // Vẽ Bot ở trung tâm (màu Tím sáng rực để hợp tone Salarixi)
+      minimapCtx.fillStyle = '#7946f0'; // PurpleAccent
+      minimapCtx.strokeStyle = '#a855f7'; // Purple-500
       minimapCtx.lineWidth = 2;
       minimapCtx.beginPath();
       minimapCtx.arc(centerX, centerY, 5, 0, 2 * Math.PI);
@@ -476,7 +653,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const dirX = Math.sin(angle);
         const dirY = Math.cos(angle);
         
-        minimapCtx.fillStyle = '#22d3ee';
+        minimapCtx.fillStyle = '#a855f7';
         minimapCtx.beginPath();
         minimapCtx.moveTo(centerX + dirX * 12, centerY + dirY * 12);
         minimapCtx.lineTo(centerX + Math.sin(angle - 2.5) * 6, centerY + Math.cos(angle - 2.5) * 6);
@@ -486,6 +663,92 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
   }
+
+  // --- Lắng nghe các Module Hack phong cách Hack Client ---
+  const killauraToggle = document.getElementById('killaura-toggle');
+  const autoeatToggle = document.getElementById('autoeat-toggle');
+  const autoarmorToggle = document.getElementById('autoarmor-toggle');
+  const autoReconnectToggle = document.getElementById('auto-reconnect-toggle');
+  const killauraDualwieldToggle = document.getElementById('killaura-dualwield-toggle');
+
+  if (killauraDualwieldToggle) {
+    // Khôi phục trạng thái từ localStorage
+    const savedDualwield = localStorage.getItem('mc_bot_killaura_dualwield');
+    killauraDualwieldToggle.checked = savedDualwield !== 'false'; // Mặc định là true
+
+    killauraDualwieldToggle.addEventListener('change', (e) => {
+      localStorage.setItem('mc_bot_killaura_dualwield', e.target.checked);
+      if (socket && socket.connected && isBotOnline) {
+        socket.emit('toggle_module', { module: 'killaura_dualwield', state: e.target.checked });
+      }
+    });
+  }
+
+  if (killauraToggle) {
+    killauraToggle.addEventListener('change', (e) => {
+      if (!socket || !socket.connected || !isBotOnline) {
+        alert('Bot chưa kết nối! Vui lòng kết nối Bot trước khi bật Killaura.');
+        e.target.checked = false;
+        return;
+      }
+      const dualwieldState = killauraDualwieldToggle ? killauraDualwieldToggle.checked : true;
+      socket.emit('toggle_module', { 
+        module: 'killaura', 
+        state: e.target.checked,
+        dualwield: dualwieldState
+      });
+    });
+  }
+
+  if (autoeatToggle) {
+    autoeatToggle.addEventListener('change', (e) => {
+      if (!socket || !socket.connected || !isBotOnline) {
+        alert('Bot chưa kết nối! Vui lòng kết nối Bot trước khi bật Auto-Eat.');
+        e.target.checked = false;
+        return;
+      }
+      socket.emit('toggle_module', { module: 'autoeat', state: e.target.checked });
+    });
+  }
+
+  if (autoarmorToggle) {
+    autoarmorToggle.addEventListener('change', (e) => {
+      if (!socket || !socket.connected || !isBotOnline) {
+        alert('Bot chưa kết nối! Vui lòng kết nối Bot trước khi bật Auto-Armor.');
+        e.target.checked = false;
+        return;
+      }
+      socket.emit('toggle_module', { module: 'autoarmor', state: e.target.checked });
+    });
+  }
+
+  if (autoReconnectToggle) {
+    autoReconnectToggle.addEventListener('change', (e) => {
+      if (autoReconnectCheckbox) {
+        autoReconnectCheckbox.checked = e.target.checked;
+      }
+      localStorage.setItem('mc_bot_auto_reconnect', e.target.checked);
+    });
+    // Khôi phục giá trị đã lưu từ localStorage
+    const savedAutoRec = localStorage.getItem('mc_bot_auto_reconnect');
+    if (savedAutoRec !== null) {
+      autoReconnectToggle.checked = savedAutoRec !== 'false';
+      if (autoReconnectCheckbox) {
+        autoReconnectCheckbox.checked = savedAutoRec !== 'false';
+      }
+    }
+  }
+
+  // Đồng bộ chiều ngược lại từ checkbox cấu hình sang switch toggle nhanh
+  if (autoReconnectCheckbox) {
+    autoReconnectCheckbox.addEventListener('change', (e) => {
+      if (autoReconnectToggle) {
+        autoReconnectToggle.checked = e.target.checked;
+      }
+      localStorage.setItem('mc_bot_auto_reconnect', e.target.checked);
+    });
+  }
+
 
   // Đóng container captcha bản đồ
   const btnCloseCaptcha = document.getElementById('btn-close-captcha');
@@ -497,51 +760,100 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // --- Hàm chèn log chat vào giao diện ---
-  function appendChatLog(sender, message, type = 'other', time = '') {
-    // Xóa dòng thông báo ban đầu nếu có
-    if (chatLog.innerHTML.includes('Chưa khởi động bot để ghi nhật ký chat')) {
-      chatLog.innerHTML = '';
-    }
-
+  function appendChatLog(sender, message, type = 'other', time = '', prefix = '', receiver = '') {
     if (!time) {
       time = new Date().toLocaleTimeString('vi-VN', { hour12: false });
     }
 
+    // Lưu vào lịch sử chat
+    chatHistory.push({ sender, message, type, time, prefix, receiver });
+
+    // Giới hạn lịch sử lưu trữ để tránh tràn bộ nhớ
+    if (chatHistory.length > 500) {
+      chatHistory.shift();
+    }
+
+    // Hiển thị badge đếm tin nhắn riêng chưa đọc nếu đang ở tab khác
+    if (type === 'private' && activeChatTab !== 'private') {
+      unreadPrivateCount++;
+      if (privateBadge) {
+        privateBadge.textContent = unreadPrivateCount;
+        privateBadge.classList.remove('hidden');
+      }
+    }
+
+    // Xác định xem có vẽ tin nhắn này vào màn hình hiện tại hay không
+    const shouldDraw = activeChatTab === 'all' ||
+      (activeChatTab === 'public' && (type === 'public' || type === 'other' || type === 'bot')) ||
+      (activeChatTab === 'private' && type === 'private') ||
+      (activeChatTab === 'system' && type === 'system');
+
+    if (shouldDraw) {
+      appendDivToChatLog(sender, message, type, time, prefix, receiver);
+    }
+  }
+
+  // Hàm vẽ phần tử tin nhắn thực tế vào DOM
+  function appendDivToChatLog(sender, message, type, time, prefix = '', receiver = '') {
+    if (!chatLog) return;
+
+    // Xóa dòng thông báo ban đầu nếu có
+    if (chatLog.innerHTML.includes('Chưa khởi động bot để ghi nhật ký chat') || chatLog.innerHTML.includes('Console initialized.') || chatLog.innerHTML.includes('Không có tin nhắn')) {
+      chatLog.innerHTML = '';
+    }
+
     const messageDiv = document.createElement('div');
-    messageDiv.className = 'p-1 rounded transition hover:bg-slate-900/50 flex flex-wrap items-start text-[13px] leading-relaxed';
+    messageDiv.className = 'p-0.5 rounded transition hover:bg-zinc-900/50 flex flex-wrap items-start text-[11px] leading-relaxed';
 
     const timeSpan = document.createElement('span');
-    timeSpan.className = 'text-slate-600 text-xs mr-2 font-mono shrink-0 mt-0.5';
+    timeSpan.className = 'text-zinc-600 mr-1.5 font-mono shrink-0 mt-0.5';
     timeSpan.textContent = `[${time}]`;
     messageDiv.appendChild(timeSpan);
 
+    // Render prefix nếu có (ví dụ: [G], [Kênh Chung])
+    if (prefix) {
+      const prefixSpan = document.createElement('span');
+      prefixSpan.className = 'text-zinc-550 mr-1 shrink-0 font-medium';
+      prefixSpan.textContent = prefix;
+      messageDiv.appendChild(prefixSpan);
+    }
+
     const senderSpan = document.createElement('span');
-    senderSpan.className = 'font-semibold mr-1.5 shrink-0';
+    senderSpan.className = 'font-semibold mr-1 shrink-0';
 
     const messageSpan = document.createElement('span');
     messageSpan.className = 'break-all';
 
-    // Phân loại style cho từng loại người gửi
-    if (type === 'system') {
-      senderSpan.textContent = '[Hệ thống]';
-      senderSpan.className = 'text-amber-500 font-semibold mr-1.5 shrink-0';
+    // Phân loại style cho từng loại người gửi (hợp tone màu tím/hồng Salarixi)
+    if (type === 'private') {
+      senderSpan.className = 'text-pink-500 font-bold mr-1.5 shrink-0 px-1 py-0.5 bg-pink-950/20 border border-pink-900/35 rounded text-[10px]';
+      if (receiver) {
+        senderSpan.textContent = `[Nhắn riêng: ${sender} -> ${receiver}]`;
+      } else {
+        senderSpan.textContent = `[Nhắn riêng]`;
+      }
       messageSpan.textContent = message;
-      messageSpan.className = 'text-slate-400 italic';
+      messageSpan.className = 'text-pink-400 font-semibold';
+    } else if (type === 'system') {
+      senderSpan.textContent = '[Hệ thống]';
+      senderSpan.className = 'text-purpleAccent font-semibold mr-1.5 shrink-0';
+      messageSpan.textContent = message;
+      messageSpan.className = 'text-zinc-400 italic';
     } else if (type === 'bot') {
       senderSpan.textContent = `<${sender}>`;
-      senderSpan.className = 'text-cyan-400 font-semibold mr-1.5 shrink-0';
+      senderSpan.className = 'text-violet-400 font-semibold mr-1.5 shrink-0';
       messageSpan.textContent = message;
-      messageSpan.className = 'text-cyan-100';
+      messageSpan.className = 'text-violet-200';
     } else if (sender === 'Lỗi') {
       senderSpan.textContent = `[Lỗi]`;
       senderSpan.className = 'text-red-500 font-semibold mr-1.5 shrink-0';
       messageSpan.textContent = message;
-      messageSpan.className = 'text-red-300';
+      messageSpan.className = 'text-red-400';
     } else {
       senderSpan.textContent = `<${sender}>`;
-      senderSpan.className = 'text-emerald-400 font-semibold mr-1.5 shrink-0';
+      senderSpan.className = 'text-indigo-400 font-semibold mr-1.5 shrink-0';
       messageSpan.textContent = message;
-      messageSpan.className = 'text-slate-200';
+      messageSpan.className = 'text-zinc-350';
     }
 
     messageDiv.appendChild(senderSpan);
@@ -551,4 +863,417 @@ document.addEventListener('DOMContentLoaded', () => {
     // Tự động cuộn xuống dưới cùng
     chatLog.scrollTop = chatLog.scrollHeight;
   }
+
+  // --- Khởi tạo Giao diện Hòm đồ & các tác vụ ---
+  let currentInventoryData = Array(46).fill(null);
+
+  const inventoryMainGrid = document.getElementById('inventory-main-grid');
+  const inventoryHotbarGrid = document.getElementById('inventory-hotbar-grid');
+  
+  if (inventoryMainGrid) {
+    for (let i = 9; i <= 35; i++) {
+      const slotDiv = document.createElement('div');
+      slotDiv.id = `inv-slot-${i}`;
+      slotDiv.className = 'inv-slot w-12 h-12 md:w-14 md:h-14 bg-zinc-900 border border-zinc-800 rounded-lg flex items-center justify-center relative cursor-pointer hover:border-purpleAccent transition';
+      slotDiv.setAttribute('data-slot', i);
+      slotDiv.innerHTML = `<span class="text-[9px] text-zinc-700 font-mono">${i}</span>`;
+      inventoryMainGrid.appendChild(slotDiv);
+    }
+  }
+
+  if (inventoryHotbarGrid) {
+    for (let i = 36; i <= 44; i++) {
+      const slotDiv = document.createElement('div');
+      slotDiv.id = `inv-slot-${i}`;
+      slotDiv.className = 'inv-slot w-12 h-12 md:w-14 md:h-14 bg-zinc-900 border border-zinc-800 rounded-lg flex items-center justify-center relative cursor-pointer hover:border-purpleAccent transition border-zinc-700';
+      slotDiv.setAttribute('data-slot', i);
+      slotDiv.innerHTML = `<span class="text-[9px] text-zinc-700 font-mono">${i - 36 + 1}</span>`;
+      inventoryHotbarGrid.appendChild(slotDiv);
+    }
+  }
+
+  function getItemEmoji(name) {
+    if (!name) return '📦';
+    const n = name.toLowerCase();
+    if (n.includes('sword')) return '⚔️';
+    if (n.includes('axe')) return '🪓';
+    if (n.includes('pickaxe')) return '⛏️';
+    if (n.includes('shovel')) return '🥄';
+    if (n.includes('helmet')) return '🪖';
+    if (n.includes('chestplate')) return '👕';
+    if (n.includes('leggings')) return '👖';
+    if (n.includes('boots')) return '🥾';
+    if (n.includes('totem')) return '🗿';
+    if (n.includes('shield')) return '🛡️';
+    if (n.includes('map')) return '🗺️';
+    if (n.includes('apple')) return '🍎';
+    if (n.includes('carrot')) return '🥕';
+    if (n.includes('beef') || n.includes('porkchop') || n.includes('mutton') || n.includes('steak')) return '🥩';
+    if (n.includes('chicken')) return '🍗';
+    if (n.includes('bread')) return '🍞';
+    if (n.includes('bow')) return '🏹';
+    if (n.includes('arrow')) return '➦';
+    if (n.includes('bucket')) return '🪣';
+    if (n.includes('coal') || n.includes('charcoal')) return '🪨';
+    if (n.includes('diamond')) return '💎';
+    if (n.includes('emerald')) return '💚';
+    if (n.includes('nether_star') || n.includes('star')) return '⭐';
+    if (n.includes('potion')) return '🧪';
+    if (n.includes('egg')) return '🥚';
+    if (n.includes('pearl')) return '🔮';
+    if (n.includes('shulker') || n.includes('chest')) return '📦';
+    if (n.includes('golden') || n.includes('gold')) return '🪙';
+    if (n.includes('iron')) return '🪙';
+    if (n.includes('wood') || n.includes('plank') || n.includes('log')) return '🪵';
+    if (n.includes('stone') || n.includes('cobblestone')) return '🪨';
+    return '🏷️';
+  }
+
+  function getShortName(name) {
+    if (!name) return '';
+    if (name.length <= 8) return name;
+    return name.substring(0, 7) + '..';
+  }
+
+  if (socket) {
+    socket.on('bot-inventory', (inventoryData) => {
+      currentInventoryData = inventoryData;
+      inventoryData.forEach((item, index) => {
+        const slotDiv = document.getElementById(`inv-slot-${index}`);
+        if (!slotDiv) return;
+
+        if (item) {
+          const emoji = getItemEmoji(item.name);
+          slotDiv.innerHTML = `
+            <div class="flex flex-col items-center justify-center w-full h-full p-1 select-none">
+              <span class="text-lg">${emoji}</span>
+              <span class="text-[8px] text-zinc-400 font-mono truncate max-w-full text-center leading-none mt-0.5">${getShortName(item.displayName)}</span>
+              ${item.count > 1 ? `<span class="absolute bottom-0.5 right-1 bg-zinc-950/95 text-[9px] px-1 rounded font-mono font-bold text-zinc-300 leading-none">${item.count}</span>` : ''}
+            </div>
+          `;
+          slotDiv.setAttribute('title', `${item.displayName} (Số lượng: ${item.count})`);
+          slotDiv.classList.remove('bg-zinc-900');
+          slotDiv.classList.add('bg-zinc-950', 'border-zinc-700');
+        } else {
+          let label = '';
+          if (index === 5) label = 'Mũ';
+          else if (index === 6) label = 'Áo';
+          else if (index === 7) label = 'Quần';
+          else if (index === 8) label = 'Ủng';
+          else if (index === 45) label = 'Phụ';
+          else if (index >= 36 && index <= 44) label = `${index - 36 + 1}`;
+          else label = `${index}`;
+
+          slotDiv.innerHTML = `<span class="text-[9px] text-zinc-700 font-mono">${label}</span>`;
+          slotDiv.removeAttribute('title');
+          slotDiv.classList.remove('bg-zinc-950', 'border-zinc-700');
+          slotDiv.classList.add('bg-zinc-900');
+        }
+      });
+    });
+  }
+
+  // Sự kiện click slot hòm đồ
+  let selectedSlotIndex = null;
+  document.addEventListener('click', (e) => {
+    const slotDiv = e.target.closest('.inv-slot');
+    if (!slotDiv) return;
+
+    const slotIndex = parseInt(slotDiv.getAttribute('data-slot'));
+    if (isNaN(slotIndex)) return;
+
+    const item = currentInventoryData[slotIndex];
+    if (!item) return;
+
+    selectedSlotIndex = slotIndex;
+    
+    const modal = document.getElementById('inv-action-modal');
+    const nameEl = document.getElementById('inv-action-item-name');
+    const slotEl = document.getElementById('inv-action-item-slot');
+    const emojiEl = document.getElementById('inv-action-item-emoji');
+
+    if (modal && nameEl && slotEl && emojiEl) {
+      nameEl.textContent = item.displayName;
+      slotEl.textContent = `Slot: #${slotIndex} | Tên gốc: ${item.name}`;
+      emojiEl.textContent = getItemEmoji(item.name);
+      modal.classList.remove('hidden');
+    }
+  });
+
+  const btnCloseInvModal = document.getElementById('btn-close-inv-modal');
+  const invActionModal = document.getElementById('inv-action-modal');
+  if (btnCloseInvModal && invActionModal) {
+    btnCloseInvModal.addEventListener('click', () => {
+      invActionModal.classList.add('hidden');
+    });
+  }
+
+  const btnInvEquipHand = document.getElementById('btn-inv-equip-hand');
+  const btnInvEquipOffhand = document.getElementById('btn-inv-equip-offhand');
+  const btnInvUse = document.getElementById('btn-inv-use');
+  const btnInvDrop = document.getElementById('btn-inv-drop');
+
+  if (btnInvEquipHand) {
+    btnInvEquipHand.addEventListener('click', () => {
+      if (selectedSlotIndex !== null && socket) {
+        socket.emit('inventory-action', { slot: selectedSlotIndex, action: 'equip-hand' });
+        invActionModal.classList.add('hidden');
+      }
+    });
+  }
+
+  if (btnInvEquipOffhand) {
+    btnInvEquipOffhand.addEventListener('click', () => {
+      if (selectedSlotIndex !== null && socket) {
+        socket.emit('inventory-action', { slot: selectedSlotIndex, action: 'equip-offhand' });
+        invActionModal.classList.add('hidden');
+      }
+    });
+  }
+
+  if (btnInvUse) {
+    btnInvUse.addEventListener('click', () => {
+      if (selectedSlotIndex !== null && socket) {
+        socket.emit('inventory-action', { slot: selectedSlotIndex, action: 'use' });
+        invActionModal.classList.add('hidden');
+      }
+    });
+  }
+
+  if (btnInvDrop) {
+    btnInvDrop.addEventListener('click', () => {
+      if (selectedSlotIndex !== null && socket) {
+        socket.emit('inventory-action', { slot: selectedSlotIndex, action: 'drop' });
+        invActionModal.classList.add('hidden');
+      }
+    });
+  }
+
+  // --- Điều khiển di chuyển & Xoay nhìn Bot (Controls & Movement) ---
+  const activeKeys = {};
+  const activeRotations = {
+    left: false,
+    right: false,
+    up: false,
+    down: false
+  };
+  let rotationInterval = null;
+
+  const startRotationLoop = () => {
+    if (rotationInterval) return;
+    rotationInterval = setInterval(() => {
+      let yawDelta = 0;
+      let pitchDelta = 0;
+      
+      // Tốc độ xoay (radians mỗi 50ms)
+      const ROT_SPEED = 0.06;
+
+      if (activeRotations.left) yawDelta += ROT_SPEED;
+      if (activeRotations.right) yawDelta -= ROT_SPEED;
+      if (activeRotations.up) pitchDelta -= ROT_SPEED;   // Up trong mineflayer là pitch âm
+      if (activeRotations.down) pitchDelta += ROT_SPEED;  // Down trong mineflayer là pitch dương
+
+      if (yawDelta !== 0 || pitchDelta !== 0) {
+        if (socket) socket.emit('bot-rotate', { yawDelta, pitchDelta });
+      } else {
+        stopRotationLoop();
+      }
+    }, 50);
+  };
+
+  const stopRotationLoop = () => {
+    if (!activeRotations.left && !activeRotations.right && !activeRotations.up && !activeRotations.down) {
+      if (rotationInterval) {
+        clearInterval(rotationInterval);
+        rotationInterval = null;
+      }
+    }
+  };
+
+  window.addEventListener('keydown', (e) => {
+    // Không bắt phím khi đang gõ chat hoặc nhập liệu cấu hình
+    if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'SELECT') {
+      return;
+    }
+
+    // --- DI CHUYỂN (Movement) ---
+    const key = e.key.toLowerCase();
+    let direction = null;
+
+    if (key === 'w') direction = 'forward';
+    else if (key === 's') direction = 'back';
+    else if (key === 'a') direction = 'left';
+    else if (key === 'd') direction = 'right';
+    else if (e.key === ' ') direction = 'jump';
+    else if (e.key === 'Shift') direction = 'sneak';
+    else if (e.key === 'Control') direction = 'sprint';
+
+    if (direction) {
+      if (!activeKeys[direction]) {
+        activeKeys[direction] = true;
+        if (socket) socket.emit('bot-move', { direction, state: true });
+        const btn = document.getElementById(`btn-move-${direction}`);
+        if (btn) btn.classList.add('bg-purpleAccent', 'text-white', 'border-purpleGlow');
+      }
+      if (e.key === ' ' || e.key === 'Control') e.preventDefault(); // Tránh cuộn trang hoặc shortcut browser
+      return;
+    }
+
+    // --- XOAY NHÌN (Rotation) ---
+    let rotateDir = null;
+    if (e.key === 'ArrowUp') rotateDir = 'up';
+    else if (e.key === 'ArrowDown') rotateDir = 'down';
+    else if (e.key === 'ArrowLeft') rotateDir = 'left';
+    else if (e.key === 'ArrowRight') rotateDir = 'right';
+
+    if (rotateDir) {
+      e.preventDefault(); // Tránh cuộn trang
+      if (!activeRotations[rotateDir]) {
+        activeRotations[rotateDir] = true;
+        const btn = document.getElementById(`btn-look-${rotateDir}`);
+        if (btn) btn.classList.add('bg-purpleAccent', 'text-white', 'border-purpleGlow');
+        startRotationLoop();
+      }
+    }
+  });
+
+  window.addEventListener('keyup', (e) => {
+    // --- DI CHUYỂN (Movement) ---
+    const key = e.key.toLowerCase();
+    let direction = null;
+
+    if (key === 'w') direction = 'forward';
+    else if (key === 's') direction = 'back';
+    else if (key === 'a') direction = 'left';
+    else if (key === 'd') direction = 'right';
+    else if (e.key === ' ') direction = 'jump';
+    else if (e.key === 'Shift') direction = 'sneak';
+    else if (e.key === 'Control') direction = 'sprint';
+
+    if (direction) {
+      if (activeKeys[direction]) {
+        activeKeys[direction] = false;
+        if (socket) socket.emit('bot-move', { direction, state: false });
+        const btn = document.getElementById(`btn-move-${direction}`);
+        if (btn) btn.classList.remove('bg-purpleAccent', 'text-white', 'border-purpleGlow');
+      }
+      return;
+    }
+
+    // --- XOAY NHÌN (Rotation) ---
+    let rotateDir = null;
+    if (e.key === 'ArrowUp') rotateDir = 'up';
+    else if (e.key === 'ArrowDown') rotateDir = 'down';
+    else if (e.key === 'ArrowLeft') rotateDir = 'left';
+    else if (e.key === 'ArrowRight') rotateDir = 'right';
+
+    if (rotateDir) {
+      if (activeRotations[rotateDir]) {
+        activeRotations[rotateDir] = false;
+        const btn = document.getElementById(`btn-look-${rotateDir}`);
+        if (btn) btn.classList.remove('bg-purpleAccent', 'text-white', 'border-purpleGlow');
+        stopRotationLoop();
+      }
+    }
+  });
+
+  const bindMoveButton = (id, direction) => {
+    const btn = document.getElementById(id);
+    if (!btn) return;
+
+    const startMove = (e) => {
+      e.preventDefault();
+      if (!activeKeys[direction]) {
+        activeKeys[direction] = true;
+        if (socket) socket.emit('bot-move', { direction, state: true });
+        btn.classList.add('bg-purpleAccent', 'text-white', 'border-purpleGlow');
+      }
+    };
+
+    const stopMove = (e) => {
+      e.preventDefault();
+      if (activeKeys[direction]) {
+        activeKeys[direction] = false;
+        if (socket) socket.emit('bot-move', { direction, state: false });
+        btn.classList.remove('bg-purpleAccent', 'text-white', 'border-purpleGlow');
+      }
+    };
+
+    btn.addEventListener('mousedown', startMove);
+    btn.addEventListener('mouseup', stopMove);
+    btn.addEventListener('mouseleave', stopMove);
+
+    btn.addEventListener('touchstart', startMove, { passive: false });
+    btn.addEventListener('touchend', stopMove, { passive: false });
+  };
+
+  const bindLookButton = (id, direction) => {
+    const btn = document.getElementById(id);
+    if (!btn) return;
+
+    const startRot = (e) => {
+      e.preventDefault();
+      if (!activeRotations[direction]) {
+        activeRotations[direction] = true;
+        btn.classList.add('bg-purpleAccent', 'text-white', 'border-purpleGlow');
+        startRotationLoop();
+      }
+    };
+
+    const stopRot = (e) => {
+      e.preventDefault();
+      if (activeRotations[direction]) {
+        activeRotations[direction] = false;
+        btn.classList.remove('bg-purpleAccent', 'text-white', 'border-purpleGlow');
+        stopRotationLoop();
+      }
+    };
+
+    btn.addEventListener('mousedown', startRot);
+    btn.addEventListener('mouseup', stopRot);
+    btn.addEventListener('mouseleave', stopRot);
+
+    btn.addEventListener('touchstart', startRot, { passive: false });
+    btn.addEventListener('touchend', stopRot, { passive: false });
+  };
+
+  bindMoveButton('btn-move-forward', 'forward');
+  bindMoveButton('btn-move-back', 'back');
+  bindMoveButton('btn-move-left', 'left');
+  bindMoveButton('btn-move-right', 'right');
+  bindMoveButton('btn-move-jump', 'jump');
+  bindMoveButton('btn-move-sneak', 'sneak');
+  bindMoveButton('btn-move-sprint', 'sprint');
+
+  bindLookButton('btn-look-up', 'up');
+  bindLookButton('btn-look-down', 'down');
+  bindLookButton('btn-look-left', 'left');
+  bindLookButton('btn-look-right', 'right');
+
+  const btnMoveStop = document.getElementById('btn-move-stop');
+  if (btnMoveStop) {
+    btnMoveStop.addEventListener('click', () => {
+      // Dừng mọi phím di chuyển
+      ['forward', 'back', 'left', 'right', 'jump', 'sneak', 'sprint'].forEach(direction => {
+        activeKeys[direction] = false;
+        if (socket) socket.emit('bot-move', { direction, state: false });
+        
+        const btn = document.getElementById(`btn-move-${direction}`);
+        if (btn) {
+          btn.classList.remove('bg-purpleAccent', 'text-white', 'border-purpleGlow');
+        }
+      });
+
+      // Dừng mọi xoay nhìn
+      ['up', 'down', 'left', 'right'].forEach(direction => {
+        activeRotations[direction] = false;
+        const btn = document.getElementById(`btn-look-${direction}`);
+        if (btn) {
+          btn.classList.remove('bg-purpleAccent', 'text-white', 'border-purpleGlow');
+        }
+      });
+      stopRotationLoop();
+    });
+  }
 });
+

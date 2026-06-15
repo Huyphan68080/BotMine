@@ -1,359 +1,814 @@
 <!DOCTYPE html>
-<html lang="vi" class="h-full bg-slate-950">
+<html lang="vi" class="h-full bg-zinc-950">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Minecraft Bot Control Panel</title>
-  <!-- Tailwind CSS qua CDN -->
+  <title>salarixi client</title>
+  <!-- Tailwind CSS via CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Google Fonts - Inter -->
+  <!-- Google Fonts - Inter & JetBrains Mono -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
-  <!-- Tùy chỉnh CSS bổ sung -->
+  <!-- CSS Styles -->
   <link rel="stylesheet" href="style.css">
   <script>
     tailwind.config = {
       theme: {
         extend: {
+          colors: {
+            purpleAccent: '#7946f0',
+            purpleGlow: '#7e47ff',
+            purpleDull: '#5426be',
+          },
           fontFamily: {
             sans: ['Inter', 'sans-serif'],
-            mono: ['Fira Code', 'monospace'],
+            mono: ['JetBrains Mono', 'monospace'],
           },
         },
       },
     }
   </script>
 </head>
-<body class="h-full text-slate-100 flex flex-col antialiased">
+<body class="h-screen text-zinc-100 flex flex-col antialiased bg-zinc-950 overflow-hidden font-sans">
 
-  <!-- Header -->
-  <header class="border-b border-slate-800 bg-slate-900/50 backdrop-blur-md sticky top-0 z-50">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-      <div class="flex items-center space-x-3">
-        <!-- Icon Minecraft kiểu voxel đơn giản -->
-        <div class="w-8 h-8 bg-green-600 rounded flex items-center justify-center font-bold text-lg text-slate-950 border border-green-400 shadow-[0_0_10px_rgba(34,197,94,0.3)]">
-          M
-        </div>
-        <div>
-          <h1 class="text-lg font-bold tracking-tight text-white">MC Bot Panel</h1>
-          <p class="text-xs text-slate-400">Web Control Panel Realtime</p>
-        </div>
+  <!-- Glow effect background (Purple/Violet) -->
+  <div class="fixed inset-0 pointer-events-none z-0 overflow-hidden opacity-25">
+    <div class="absolute -top-40 -left-40 w-96 h-96 bg-purpleAccent rounded-full blur-[120px]"></div>
+    <div class="absolute top-1/2 -right-40 w-[450px] h-[450px] bg-purpleGlow rounded-full blur-[160px]"></div>
+  </div>
+
+  <!-- Header (Tauri-like Title Bar) -->
+  <header class="relative z-50 h-9 bg-zinc-950 border-b border-zinc-900 flex items-center justify-between px-3 select-none flex-shrink-0">
+    <div class="flex items-center space-x-2">
+      <!-- Title version with gradient text -->
+      <span class="title-bar-left text-sm font-bold tracking-wider uppercase">salarixi client</span>
+      <span class="text-[9px] bg-purpleAccent/20 text-purpleAccent px-1.5 py-0.5 rounded border border-purpleAccent/30 font-semibold uppercase tracking-wider font-mono">v1.1.0</span>
+    </div>
+
+    <!-- Play Time & API config -->
+    <div class="flex items-center space-x-4">
+      <!-- Play Time Counter -->
+      <div class="flex items-center space-x-1 text-zinc-500 hover:text-zinc-400 transition">
+        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" fill="currentColor" class="bi bi-clock" viewBox="0 0 16 16">
+          <path d="M8 3.5a.5.5 0 0 0-1 0V9a.5.5 0 0 0 .252.434l3.5 2a.5.5 0 0 0 .496-.868L8 8.71z"/>
+          <path d="M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16m7-8A7 7 0 1 1 1 8a7 7 0 0 1 14 0"/>
+        </svg>
+        <span id="play-time" class="text-xs font-mono">00:00:00</span>
       </div>
-      
-      <!-- Trạng thái Backend & Kết nối socket -->
-      <div class="flex items-center space-x-3 bg-slate-800/60 px-3 py-1.5 rounded-full border border-slate-700">
-        <span class="relative flex h-2.5 w-2.5">
+
+      <!-- API URL Input -->
+      <div class="flex items-center bg-zinc-900 border border-zinc-850 rounded px-2 py-0.5 text-[11px] text-zinc-400 gap-1.5 focus-within:border-purpleAccent/50 transition">
+        <span>API:</span>
+        <input type="text" id="backend-url" placeholder="http://localhost:3000" 
+               class="w-28 bg-transparent text-zinc-200 outline-none text-[11px] h-4 p-0 border-none font-mono">
+        <button id="btn-save-backend" class="text-purpleAccent hover:text-purpleGlow transition font-bold text-[9px] uppercase font-mono">
+          Lưu
+        </button>
+      </div>
+
+      <!-- Socket Status Dot -->
+      <div class="flex items-center space-x-1.5 bg-zinc-900/60 px-2 py-0.5 rounded border border-zinc-850">
+        <span class="relative flex h-1.5 w-1.5">
           <span id="socket-pulse" class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-          <span id="socket-dot" class="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500"></span>
+          <span id="socket-dot" class="relative inline-flex rounded-full h-1.5 w-1.5 bg-red-500"></span>
         </span>
-        <span id="socket-text" class="text-xs font-semibold text-slate-300">Backend: Đang kết nối...</span>
+        <span id="socket-text" class="text-[9px] font-semibold text-zinc-400 uppercase tracking-wider font-mono">Backend: Đang kết nối...</span>
       </div>
     </div>
   </header>
 
-  <!-- Main Content -->
-  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 flex flex-col lg:flex-row gap-6 overflow-hidden">
+  <!-- Main Area -->
+  <div class="relative z-10 flex-1 flex flex-row overflow-hidden h-[calc(100vh-36px)]">
     
-    <!-- Left Column: Cấu hình và Điều khiển -->
-    <div class="w-full lg:w-96 flex flex-col gap-6 shrink-0">
+    <!-- LEFT SIDEBAR: DASHBOARD MENU -->
+    <aside class="w-52 bg-zinc-950 border-r border-zinc-900 flex flex-col justify-between py-4 flex-shrink-0 select-none">
+      <div class="flex flex-col space-y-1 px-2">
+        
+        <!-- Main Tab Button -->
+        <button id="tab-btn-main" onclick="switchTab('main')" class="pretty-btn selected flex items-center space-x-3 w-full px-3 py-2 text-sm rounded font-medium text-left">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5 text-purpleAccent flex-shrink-0">
+            <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+            <polyline points="9 22 9 12 15 12 15 22"/>
+          </svg>
+          <span class="text-zinc-200">Tổng quan</span>
+        </button>
+
+        <!-- Control Tab Button -->
+        <button id="tab-btn-control" onclick="switchTab('control')" class="pretty-btn flex items-center space-x-3 w-full px-3 py-2 text-sm rounded font-medium text-zinc-400 hover:bg-zinc-900/40 hover:text-zinc-200 text-left">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5 flex-shrink-0">
+            <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+          </svg>
+          <span>Mô-đun Hack</span>
+        </button>
+
+        <!-- Inventory Tab Button -->
+        <button id="tab-btn-inventory" onclick="switchTab('inventory')" class="pretty-btn flex items-center space-x-3 w-full px-3 py-2 text-sm rounded font-medium text-zinc-400 hover:bg-zinc-900/40 hover:text-zinc-200 text-left">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5 flex-shrink-0">
+            <path d="M20 7h-9l-2-2H4a2 2 0 00-2 2v10a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2z"/>
+          </svg>
+          <span>Hòm đồ Bot</span>
+        </button>
+
+
+        <!-- Settings Tab Button -->
+        <button id="tab-btn-settings" onclick="switchTab('settings')" class="pretty-btn flex items-center space-x-3 w-full px-3 py-2 text-sm rounded font-medium text-zinc-400 hover:bg-zinc-900/40 hover:text-zinc-200 text-left">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5 flex-shrink-0">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+          <span>Thiết lập</span>
+        </button>
+
+        <!-- Radar Tab Button -->
+        <button id="tab-btn-radar" onclick="switchTab('radar')" class="pretty-btn flex items-center space-x-3 w-full px-3 py-2 text-sm rounded font-medium text-zinc-400 hover:bg-zinc-900/40 hover:text-zinc-200 text-left">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5 flex-shrink-0">
+            <path d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L16 4m0 13V4m0 0L9 7"></path>
+          </svg>
+          <span>Bản đồ Radar</span>
+        </button>
+
+        <!-- About Tab Button -->
+        <button id="tab-btn-about" onclick="switchTab('about')" class="pretty-btn flex items-center space-x-3 w-full px-3 py-2 text-sm rounded font-medium text-zinc-400 hover:bg-zinc-900/40 hover:text-zinc-200 text-left">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5 flex-shrink-0">
+            <path d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+          </svg>
+          <span>Giới thiệu</span>
+        </button>
+      </div>
+
+      <!-- Footer indicator of Sidebar -->
+      <div class="px-4 py-2 border-t border-zinc-900/80 text-[10px] font-mono text-zinc-600 tracking-wider">
+        ONION CLIENT (BOT)<br>
+        SYSTEM ACTIVE
+      </div>
+    </aside>
+
+    <!-- MIDDLE PANEL: TAB CONTENT (Scrollable) -->
+    <main class="flex-1 bg-zinc-900/15 p-6 overflow-y-auto custom-scrollbar flex flex-col justify-start">
       
-      <!-- Box 1: Cấu hình Backend URL -->
-      <section class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl">
-        <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-400 mb-4 flex items-center gap-2">
-          ⚙️ Cấu hình API Server
-        </h2>
-        <div class="space-y-3">
-          <div>
-            <label for="backend-url" class="block text-xs font-medium text-slate-400 mb-1">Backend URL (Render hoặc Local)</label>
-            <div class="flex gap-2">
-              <input type="text" id="backend-url" placeholder="http://localhost:3000" 
-                     class="flex-1 bg-slate-950 border border-slate-850 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition">
-              <button id="btn-save-backend" 
-                      class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-4 py-2 rounded-lg transition active:scale-95 shadow-[0_0_15px_rgba(37,99,235,0.2)]">
-                Lưu
-              </button>
-            </div>
-            <p class="text-[10px] text-slate-500 mt-1">Lưu ý: Thay đổi URL yêu cầu tải lại trang.</p>
-          </div>
-        </div>
-      </section>
-
-      <!-- Box 2: Cấu hình Minecraft Bot -->
-      <section class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl flex-1 flex flex-col justify-between">
+      <!-- MAIN TAB CONTAINER -->
+      <div id="tab-pane-main" class="tab-pane space-y-6">
         <div>
-          <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-400 mb-4 flex items-center gap-2">
-            🤖 Cấu hình Minecraft Bot
+          <h2 class="text-lg font-bold text-purpleAccent tracking-wide uppercase border-b border-zinc-800 pb-2">
+            🏠 Cấu hình kết nối bot
           </h2>
-          
-          <form id="bot-config-form" class="space-y-4">
+          <p class="text-xs text-zinc-400 mt-1">Điền thông số máy chủ Minecraft để kết nối bot điều khiển.</p>
+        </div>
+
+        <div class="bg-zinc-950 border border-zinc-900 rounded-xl p-5 space-y-4 max-w-2xl shadow-xl">
+          <form id="bot-config-form" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            
             <!-- Server IP -->
+            <div class="md:col-span-2">
+              <label class="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1.5">Địa chỉ Server (IP/Host)</label>
+              <input type="text" id="server-ip" required placeholder="play.example.com" 
+                     class="w-full bg-zinc-900 border border-zinc-850 rounded px-3 py-2 text-xs text-zinc-200 focus:outline-none focus-purple-glow transition font-mono">
+            </div>
+
+            <!-- Port -->
             <div>
-              <label for="server-ip" class="block text-xs font-medium text-slate-400 mb-1">Minecraft Server IP (Host)</label>
-              <input type="text" id="server-ip" required placeholder="play.example.com hoặc localhost" 
-                     class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 transition">
+              <label class="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1.5">Cổng (Port)</label>
+              <input type="number" id="server-port" value="25565" required 
+                     class="w-full bg-zinc-900 border border-zinc-850 rounded px-3 py-2 text-xs text-zinc-200 focus:outline-none focus-purple-glow transition font-mono">
             </div>
 
-            <!-- Server Port & Version -->
-            <div class="grid grid-cols-2 gap-3">
-              <div>
-                <label for="server-port" class="block text-xs font-medium text-slate-400 mb-1">Cổng (Port)</label>
-                <input type="number" id="server-port" value="25565" required 
-                       class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 transition">
-              </div>
-              <div>
-                <label for="minecraft-version" class="block text-xs font-medium text-slate-400 mb-1">Phiên bản (Version)</label>
-                <select id="minecraft-version" 
-                        class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 transition">
-                  <option value="auto">Auto-detect (Tự tìm)</option>
-                  <option value="26.1.2">26.1.2</option>
-                  <option value="26.1.1">26.1.1</option>
-                  <option value="26.1">26.1</option>
-                  <option value="26.0">26.0</option>
-                  <option value="1.21.1">1.21.1</option>
-                  <option value="1.21">1.21</option>
-                  <option value="1.20.6">1.20.6</option>
-                  <option value="1.20.4">1.20.4</option>
-                  <option value="1.20.1">1.20.1</option>
-                  <option value="1.19.4">1.19.4</option>
-                  <option value="1.18.2">1.18.2</option>
-                  <option value="1.16.5">1.16.5</option>
-                  <option value="1.12.2">1.12.2</option>
-                </select>
-              </div>
-            </div>
-
-            <!-- Bot Username -->
+            <!-- Minecraft Version -->
             <div>
-              <label for="bot-username" class="block text-xs font-medium text-slate-400 mb-1">Tên Bot (Username)</label>
-              <input type="text" id="bot-username" required placeholder="Bot_Minecraft" 
-                     class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 transition">
+              <label class="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1.5">Phiên bản</label>
+              <select id="minecraft-version" 
+                      class="w-full bg-zinc-900 border border-zinc-850 rounded px-3 py-2 text-xs text-zinc-200 focus:outline-none focus-purple-glow transition h-[34px]">
+                <option value="auto">Auto (Tự nhận diện)</option>
+                <option value="26.1.2">26.1.2</option>
+                <option value="26.1.1">26.1.1</option>
+                <option value="26.1">26.1</option>
+                <option value="26.0">26.0</option>
+                <option value="1.21.1">1.21.1</option>
+                <option value="1.21">1.21</option>
+                <option value="1.20.6">1.20.6</option>
+                <option value="1.20.4">1.20.4</option>
+                <option value="1.20.1">1.20.1</option>
+                <option value="1.19.4">1.19.4</option>
+                <option value="1.18.2">1.18.2</option>
+                <option value="1.16.5">1.16.5</option>
+                <option value="1.12.2">1.12.2</option>
+              </select>
             </div>
 
-            <!-- Bot Password -->
+            <!-- Username -->
             <div>
-              <label for="bot-password" class="block text-xs font-medium text-slate-400 mb-1">Mật khẩu Bot (Tự động Reg/Login)</label>
-              <input type="password" id="bot-password" placeholder="Nhập mật khẩu (nếu có)" 
-                     class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 transition">
+              <label class="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1.5">Tên Bot (Username)</label>
+              <input type="text" id="bot-username" required placeholder="Onion_Bot" 
+                     class="w-full bg-zinc-900 border border-zinc-850 rounded px-3 py-2 text-xs text-zinc-200 focus:outline-none focus-purple-glow transition font-mono">
             </div>
 
-            <!-- Auth Type & Auto Reconnect -->
-            <div class="grid grid-cols-2 gap-3 items-center">
-              <div>
-                <label for="auth-type" class="block text-xs font-medium text-slate-400 mb-1">Xác thực (Auth)</label>
-                <select id="auth-type" 
-                        class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 transition">
-                  <option value="offline">Offline (Cracked)</option>
-                  <option value="microsoft">Microsoft (Premium)</option>
-                </select>
-              </div>
-              <div class="flex items-center h-full pt-5">
-                <input type="checkbox" id="auto-reconnect" checked 
-                       class="w-4 h-4 rounded bg-slate-950 border-slate-800 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-slate-900 focus:ring-2">
-                <label for="auto-reconnect" class="ml-2 text-xs font-medium text-slate-300 cursor-pointer select-none">Tự kết nối lại</label>
-              </div>
+            <!-- Password -->
+            <div>
+              <label class="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1.5">Mật khẩu (/login)</label>
+              <input type="password" id="bot-password" placeholder="Mật khẩu tự động" 
+                     class="w-full bg-zinc-900 border border-zinc-850 rounded px-3 py-2 text-xs text-zinc-200 focus:outline-none focus-purple-glow transition h-[34px]">
+            </div>
+
+            <!-- Hidden components to maintain JS mapping -->
+            <div class="hidden">
+              <select id="auth-type">
+                <option value="offline" selected>Offline</option>
+                <option value="microsoft">Microsoft</option>
+              </select>
+              <input type="checkbox" id="auto-reconnect" checked>
             </div>
           </form>
-        </div>
 
-        <!-- Điều khiển Connection -->
-        <div class="mt-6 space-y-2">
-          <button id="btn-connect-bot" type="button"
-                  class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-2.5 px-4 rounded-lg transition active:scale-[0.98] flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(16,185,129,0.2)]">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
-            Kết nối Bot
-          </button>
-          
-          <button id="btn-disconnect-bot" type="button" disabled
-                  class="w-full bg-rose-600/50 text-rose-300 border border-rose-800/40 cursor-not-allowed font-semibold py-2.5 px-4 rounded-lg transition active:scale-[0.98] flex items-center justify-center gap-2">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"></path></svg>
-            Ngắt kết nối
-          </button>
-        </div>
-      </section>
-    </div>
-
-    <!-- Right Column: Status Realtime & Chat Log -->
-    <div class="flex-1 flex flex-col gap-6 overflow-hidden">
-      
-      <!-- Panel 1: Realtime Stats -->
-      <section class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl">
-        <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-400 mb-4 flex items-center gap-2">
-          📊 Thông số Bot thời gian thực
-        </h2>
-        
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <!-- Trạng thái kết nối -->
-          <div class="bg-slate-950 p-4 rounded-xl border border-slate-800/60 flex flex-col justify-between">
-            <span class="text-xs text-slate-400 block mb-1">Trạng thái Bot</span>
-            <div class="flex items-center space-x-2 mt-2">
-              <span id="bot-pulse" class="flex h-3.5 w-3.5 relative">
-                <span id="bot-pulse-ring" class="animate-ping absolute inline-flex h-full w-full rounded-full bg-slate-400 opacity-75"></span>
-                <span id="bot-dot" class="relative inline-flex rounded-full h-3.5 w-3.5 bg-slate-500"></span>
-              </span>
-              <span id="bot-status-text" class="text-lg font-bold text-slate-300">Offline</span>
-            </div>
-            <p id="bot-status-desc" class="text-xs text-slate-500 mt-2 truncate">Chưa khởi chạy kết nối</p>
-          </div>
-
-          <!-- Máu & Thức ăn -->
-          <div class="bg-slate-950 p-4 rounded-xl border border-slate-800/60 space-y-3">
-            <!-- Máu -->
-            <div>
-              <div class="flex justify-between items-center text-xs mb-1">
-                <span class="text-slate-400 flex items-center gap-1">❤️ Sinh mệnh (Health)</span>
-                <span id="stat-health-val" class="font-semibold text-rose-400">0/20</span>
-              </div>
-              <div class="w-full bg-slate-900 rounded-full h-2.5 overflow-hidden border border-slate-800">
-                <div id="stat-health-bar" class="bg-rose-500 h-full rounded-full transition-all duration-350" style="width: 0%"></div>
-              </div>
+          <div class="pt-4 border-t border-zinc-900 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
+            
+            <!-- Reconnection Toggle -->
+            <div class="flex items-center">
+              <label class="relative inline-flex items-center cursor-pointer select-none">
+                <input type="checkbox" id="auto-reconnect-toggle" checked class="sr-only peer">
+                <div class="w-8 h-4 bg-zinc-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-zinc-500 after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-purpleAccent peer-checked:after:bg-white"></div>
+                <span class="ml-2.5 text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Tự động kết nối lại</span>
+              </label>
             </div>
 
-            <!-- Thức ăn -->
-            <div>
-              <div class="flex justify-between items-center text-xs mb-1">
-                <span class="text-slate-400 flex items-center gap-1">🍖 Thức ăn (Food)</span>
-                <span id="stat-food-val" class="font-semibold text-amber-500">0/20</span>
-              </div>
-              <div class="w-full bg-slate-900 rounded-full h-2.5 overflow-hidden border border-slate-800">
-                <div id="stat-food-bar" class="bg-amber-500 h-full rounded-full transition-all duration-350" style="width: 0%"></div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Tọa độ X Y Z -->
-          <div class="bg-slate-950 p-4 rounded-xl border border-slate-800/60">
-            <span class="text-xs text-slate-400 block mb-2">📍 Tọa độ hiện tại</span>
-            <div class="grid grid-cols-3 gap-2 text-center mt-1">
-              <div class="bg-slate-900 p-2 rounded-lg border border-slate-800/50">
-                <span class="text-[10px] text-slate-500 block uppercase font-semibold">X</span>
-                <span id="coord-x" class="text-sm font-mono font-semibold text-blue-400">0.00</span>
-              </div>
-              <div class="bg-slate-900 p-2 rounded-lg border border-slate-800/50">
-                <span class="text-[10px] text-slate-500 block uppercase font-semibold">Y</span>
-                <span id="coord-y" class="text-sm font-mono font-semibold text-emerald-400">0.00</span>
-              </div>
-              <div class="bg-slate-900 p-2 rounded-lg border border-slate-800/50">
-                <span class="text-[10px] text-slate-500 block uppercase font-semibold">Z</span>
-                <span id="coord-z" class="text-sm font-mono font-semibold text-purple-400">0.00</span>
-              </div>
+            <!-- Connection Actions -->
+            <div class="flex space-x-3">
+              <button id="btn-connect-bot" type="button"
+                      class="bg-purpleAccent hover:bg-purpleGlow text-white font-bold uppercase tracking-widest text-[11px] px-5 py-2.5 rounded-lg transition active:scale-95 flex items-center gap-1.5 shadow-[0_0_15px_rgba(121,70,240,0.3)]">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                Kết nối Bot
+              </button>
+              
+              <button id="btn-disconnect-bot" type="button" disabled
+                      class="bg-zinc-850 text-zinc-650 border border-zinc-800 font-bold uppercase tracking-widest text-[11px] px-5 py-2.5 rounded-lg cursor-not-allowed transition active:scale-95 flex items-center gap-1.5">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"></path></svg>
+                Dừng Bot
+              </button>
             </div>
           </div>
         </div>
-      </section>
+      </div>
 
-      <!-- Panel 2 & Minimap Container -->
-      <div class="flex-1 flex flex-col md:flex-row gap-6 min-h-[350px] overflow-hidden">
-        <!-- Live Chat Log (Left Side) -->
-        <section class="flex-1 bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl flex flex-col overflow-hidden">
-          <div class="flex items-center justify-between mb-3 shrink-0">
-            <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-2">
-              💬 Nhật ký Server Game (Chat Log)
-            </h2>
-            <button id="btn-clear-chat" class="text-xs text-slate-500 hover:text-slate-300 transition px-2 py-1 bg-slate-950 border border-slate-800 rounded-lg">
-              Xóa màn hình
-            </button>
-          </div>
-
-          <!-- Khung chat log (Minecraft style) -->
-          <div id="chat-log" class="flex-1 bg-slate-950 border border-slate-850 rounded-xl p-4 overflow-y-auto font-mono text-sm space-y-2.5 scrollbar-thin">
-            <div class="text-slate-500 italic text-xs">Hệ thống: Chưa khởi động bot để ghi nhật ký chat...</div>
-          </div>
-
-          <!-- Khung hiển thị Captcha Bản đồ (ẩn mặc định, chỉ hiện khi nhận được ảnh) -->
-          <div id="captcha-container" class="hidden bg-slate-950 border border-slate-800 rounded-xl p-3 mt-3 flex items-center justify-between gap-4">
-            <div class="flex items-center gap-3">
-              <div class="bg-slate-900 border border-slate-800 p-1 rounded-lg">
-                <img id="captcha-img" src="" alt="Captcha Map" class="w-24 h-24 object-contain pixelated border border-slate-700 rounded shadow-md">
-              </div>
-              <div>
-                <h3 class="text-xs font-semibold text-amber-500 uppercase tracking-wider">🧩 Phát hiện Captcha Bản đồ</h3>
-                <p class="text-[11px] text-slate-400 mt-1">Đọc mã trên bản đồ và nhập vào ô chat bên dưới để giải.</p>
-              </div>
-            </div>
-            <button id="btn-close-captcha" class="text-xs text-slate-500 hover:text-slate-300 px-2.5 py-1 bg-slate-900 border border-slate-800 rounded-lg transition active:scale-95">
-              Ẩn
-            </button>
-          </div>
-
-          <!-- Chat Input Form -->
-          <div class="mt-4 flex gap-2 shrink-0">
-            <input type="text" id="chat-input" disabled placeholder="Kết nối bot để bắt đầu nhắn tin..." 
-                   class="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition disabled:opacity-55 disabled:cursor-not-allowed">
-            <button id="btn-send-chat" disabled
-                    class="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2.5 rounded-lg transition active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center shadow-[0_0_15px_rgba(37,99,235,0.2)]">
-              Gửi
-            </button>
-          </div>
-        </section>
-
-        <!-- Live Minimap / Radar (Right Side) -->
-        <section class="w-full md:w-80 shrink-0 bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl flex flex-col items-center">
-          <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-400 mb-4 flex items-center gap-2 self-start">
-            🗺️ Màn hình trực tiếp (Radar View)
+      <!-- CONTROL TAB CONTAINER -->
+      <div id="tab-pane-control" class="tab-pane hidden space-y-6">
+        <div>
+          <h2 class="text-lg font-bold text-purpleAccent tracking-wide uppercase border-b border-zinc-800 pb-2">
+            🎮 Các mô-đun gian lận & tự động (Cheat modules)
           </h2>
-          <div class="relative bg-slate-950 border border-slate-800 rounded-xl p-2 flex items-center justify-center w-[240px] h-[240px] shadow-inner">
-            <canvas id="minimap-canvas" width="220" height="220" class="rounded bg-black"></canvas>
-            <div id="minimap-overlay-status" class="absolute inset-0 bg-slate-950/85 flex flex-col items-center justify-center text-xs text-slate-500 font-semibold rounded-xl text-center p-4">
-              <svg class="w-8 h-8 text-slate-700 mb-2 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L16 4m0 13V4m0 0L9 7"></path></svg>
-              <span>Chờ bot kết nối trực tiếp...</span>
+          <p class="text-xs text-zinc-400 mt-1">Nhấp bật/tắt các tính năng hack điều khiển bot Minecraft.</p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-3xl">
+          
+          <!-- Killaura module card -->
+          <div class="bg-zinc-950 border border-zinc-900 p-4.5 rounded-xl flex flex-col justify-between space-y-4 shadow-lg">
+            <div class="flex items-center justify-between">
+              <div>
+                <span class="text-sm font-bold text-zinc-200 tracking-wide block">Killaura</span>
+                <span class="text-[10px] text-zinc-500 mt-1 block">Tự động tấn công các thực thể xung quanh</span>
+              </div>
+              <label class="relative inline-flex items-center cursor-pointer select-none">
+                <input type="checkbox" id="killaura-toggle" class="sr-only peer">
+                <div class="w-9 h-5 bg-zinc-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-zinc-550 after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-purpleAccent peer-checked:after:bg-white"></div>
+              </label>
             </div>
-          </div>
-          <!-- Legend / Bảng mô tả ký hiệu màu sắc -->
-          <div class="w-full mt-4 text-[11px] text-slate-400 space-y-2.5 border-t border-slate-800/80 pt-3">
-            <div class="flex justify-between items-center">
-              <span class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.6)]"></span> Bot (Trung tâm)</span>
-              <span class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]"></span> Người chơi khác</span>
-            </div>
-            <div class="flex justify-between items-center">
-              <span class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.6)]"></span> Quái vật (Hostile)</span>
-              <span class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.6)]"></span> Động vật (Passive)</span>
-            </div>
-            <div class="grid grid-cols-3 gap-1 pt-1.5 border-t border-slate-800/50 text-[10px] text-slate-500 text-center">
-              <div class="flex flex-col items-center">
-                <span class="w-4 h-2 bg-green-800 rounded"></span>
-                <span class="mt-0.5">Cỏ / Lá</span>
+            
+            <div class="border-t border-zinc-900/60 pt-3 space-y-2">
+              <div class="flex justify-between items-center text-[10px] font-mono text-zinc-500">
+                <span>Bán kính tấn công</span>
+                <span class="text-purpleAccent font-bold">4.0 blocks (Cố định)</span>
               </div>
-              <div class="flex flex-col items-center">
-                <span class="w-4 h-2 bg-slate-700 rounded"></span>
-                <span class="mt-0.5">Đá / Quặng</span>
-              </div>
-              <div class="flex flex-col items-center">
-                <span class="w-4 h-2 bg-amber-800 rounded"></span>
-                <span class="mt-0.5">Gỗ</span>
-              </div>
-            </div>
-            <div class="grid grid-cols-3 gap-1 text-[10px] text-slate-500 text-center">
-              <div class="flex flex-col items-center">
-                <span class="w-4 h-2 bg-blue-800 rounded"></span>
-                <span class="mt-0.5">Nước</span>
-              </div>
-              <div class="flex flex-col items-center">
-                <span class="w-4 h-2 bg-red-800 rounded"></span>
-                <span class="mt-0.5">Lava</span>
-              </div>
-              <div class="flex flex-col items-center">
-                <span class="w-4 h-2 bg-slate-900 border border-slate-800 rounded"></span>
-                <span class="mt-0.5">Void / Khác</span>
+              <div class="flex justify-between items-center text-[10px] font-mono text-zinc-500 border-t border-zinc-900/40 pt-2">
+                <span>Sử dụng 2 tay (Dual Wield)</span>
+                <label class="relative inline-flex items-center cursor-pointer select-none">
+                  <input type="checkbox" id="killaura-dualwield-toggle" checked class="sr-only peer">
+                  <div class="w-8 h-4 bg-zinc-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-zinc-500 after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-purpleAccent peer-checked:after:bg-white"></div>
+                </label>
               </div>
             </div>
           </div>
-        </section>
+
+          <!-- Auto-Eat module card -->
+          <div class="bg-zinc-950 border border-zinc-900 p-4.5 rounded-xl flex flex-col justify-between space-y-4 shadow-lg">
+            <div class="flex items-center justify-between">
+              <div>
+                <span class="text-sm font-bold text-zinc-200 tracking-wide block">Auto-Eat</span>
+                <span class="text-[10px] text-zinc-500 mt-1 block">Tự động ăn khi đói (&lt; 14 đùi)</span>
+              </div>
+              <label class="relative inline-flex items-center cursor-pointer select-none">
+                <input type="checkbox" id="autoeat-toggle" class="sr-only peer">
+                <div class="w-9 h-5 bg-zinc-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-zinc-550 after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-purpleAccent peer-checked:after:bg-white"></div>
+              </label>
+            </div>
+
+            <div class="border-t border-zinc-900/60 pt-3 flex justify-between items-center text-[10px] font-mono text-zinc-500">
+              <span>Độ đói kích hoạt</span>
+              <span class="text-purpleAccent font-bold">&lt; 14 đùi ăn</span>
+            </div>
+          </div>
+
+          <!-- Auto-Armor module card -->
+          <div class="bg-zinc-950 border border-zinc-900 p-4.5 rounded-xl flex flex-col justify-between space-y-4 shadow-lg md:col-span-2">
+            <div class="flex items-center justify-between">
+              <div>
+                <span class="text-sm font-bold text-zinc-200 tracking-wide block">Auto-Armor</span>
+                <span class="text-[10px] text-zinc-500 mt-1 block">Tự động trang bị giáp tối ưu nhất trong túi đồ</span>
+              </div>
+              <label class="relative inline-flex items-center cursor-pointer select-none">
+                <input type="checkbox" id="autoarmor-toggle" class="sr-only peer">
+                <div class="w-9 h-5 bg-zinc-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-zinc-550 after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-purpleAccent peer-checked:after:bg-white"></div>
+              </label>
+            </div>
+
+            <div class="border-t border-zinc-900/60 pt-3 flex justify-between items-center text-[10px] font-mono text-zinc-500">
+              <span>Sự kiện kích hoạt</span>
+              <span class="text-purpleAccent font-bold">Khi hòm đồ cập nhật vật phẩm mới</span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- INVENTORY TAB CONTAINER -->
+      <div id="tab-pane-inventory" class="tab-pane hidden space-y-6">
+        <div>
+          <h2 class="text-lg font-bold text-purpleAccent tracking-wide uppercase border-b border-zinc-800 pb-2">
+            🎒 Hòm đồ & Trang bị (Inventory)
+          </h2>
+          <p class="text-xs text-zinc-400 mt-1">Quản lý các vật phẩm trong hòm đồ của bot. Nhấp vào vật phẩm để sử dụng, trang bị hoặc vứt bỏ.</p>
+        </div>
+
+        <div class="flex flex-col lg:flex-row gap-6">
+          <!-- Cột bên trái: Giao diện Trang bị (Armor & Off-hand) -->
+          <div class="bg-zinc-950 border border-zinc-900 p-5 rounded-xl flex flex-col items-center justify-center space-y-4 shadow-lg w-full lg:w-64">
+            <h3 class="text-xs font-bold text-zinc-400 uppercase tracking-widest border-b border-zinc-900 pb-2 w-full text-center">Trang bị</h3>
+            
+            <div class="flex flex-col items-center space-y-2.5">
+              <!-- Helmet slot (slot 5) -->
+              <div id="inv-slot-5" class="inv-slot w-14 h-14 bg-zinc-900 border border-zinc-800 rounded-lg flex items-center justify-center relative cursor-pointer hover:border-purpleAccent transition" data-slot="5" title="Mũ (Helmet)">
+                <span class="text-[9px] text-zinc-650 font-mono">Helmet</span>
+              </div>
+              <!-- Chestplate slot (slot 6) -->
+              <div id="inv-slot-6" class="inv-slot w-14 h-14 bg-zinc-900 border border-zinc-800 rounded-lg flex items-center justify-center relative cursor-pointer hover:border-purpleAccent transition" data-slot="6" title="Giáp ngực (Chestplate)">
+                <span class="text-[9px] text-zinc-650 font-mono">Chest</span>
+              </div>
+              <!-- Leggings slot (slot 7) -->
+              <div id="inv-slot-7" class="inv-slot w-14 h-14 bg-zinc-900 border border-zinc-800 rounded-lg flex items-center justify-center relative cursor-pointer hover:border-purpleAccent transition" data-slot="7" title="Quần (Leggings)">
+                <span class="text-[9px] text-zinc-650 font-mono">Legs</span>
+              </div>
+              <!-- Boots slot (slot 8) -->
+              <div id="inv-slot-8" class="inv-slot w-14 h-14 bg-zinc-900 border border-zinc-800 rounded-lg flex items-center justify-center relative cursor-pointer hover:border-purpleAccent transition" data-slot="8" title="Ủng (Boots)">
+                <span class="text-[9px] text-zinc-650 font-mono">Boots</span>
+              </div>
+
+              <!-- Off-hand slot (slot 45) -->
+              <div class="mt-4 pt-4 border-t border-zinc-900 w-full flex flex-col items-center">
+                <span class="text-[10px] text-zinc-500 mb-1.5 uppercase font-mono tracking-wider">Tay phụ</span>
+                <div id="inv-slot-45" class="inv-slot w-14 h-14 bg-zinc-900 border border-zinc-800 rounded-lg flex items-center justify-center relative cursor-pointer hover:border-purpleAccent transition" data-slot="45" title="Tay phụ (Off-hand)">
+                  <span class="text-[9px] text-zinc-650 font-mono">Offhand</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Cột bên phải: Main Inventory & Hotbar -->
+          <div class="flex-1 bg-zinc-950 border border-zinc-900 p-5 rounded-xl flex flex-col space-y-6 shadow-lg">
+            <div>
+              <h3 class="text-xs font-bold text-zinc-400 uppercase tracking-widest border-b border-zinc-900 pb-2 mb-4">Hòm đồ chính</h3>
+              
+              <!-- Main Inventory Grid (3x9 = 27 slots: index 9 to 35) -->
+              <div class="grid grid-cols-9 gap-2 max-w-lg">
+                <div id="inventory-main-grid" class="contents"></div>
+              </div>
+            </div>
+
+            <div>
+              <h3 class="text-xs font-bold text-zinc-400 uppercase tracking-widest border-b border-zinc-900 pb-2 mb-4">Thanh công cụ nhanh (Hotbar)</h3>
+              
+              <!-- Hotbar Grid (1x9 = 9 slots: index 36 to 44) -->
+              <div class="grid grid-cols-9 gap-2 max-w-lg">
+                <div id="inventory-hotbar-grid" class="contents"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SETTINGS TAB CONTAINER -->
+      <div id="tab-pane-settings" class="tab-pane hidden space-y-6">
+        <div>
+          <h2 class="text-lg font-bold text-purpleAccent tracking-wide uppercase border-b border-zinc-800 pb-2">
+            ⚙️ Thiết lập cấu hình hệ thống
+          </h2>
+          <p class="text-xs text-zinc-400 mt-1">Các tùy chỉnh nâng cao cho bot và tiến trình tự động hóa.</p>
+        </div>
+
+        <div class="bg-zinc-950 border border-zinc-900 rounded-xl p-5 max-w-2xl space-y-4 shadow-lg">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1.5">Tầm nhìn (Render distance)</label>
+              <input type="number" value="8" disabled 
+                     class="w-full bg-zinc-900/50 border border-zinc-850 rounded px-3 py-2 text-xs text-zinc-500 cursor-not-allowed font-mono">
+            </div>
+            <div>
+              <label class="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1.5">Tự động hồi sinh (Auto respawn)</label>
+              <input type="text" value="Có (Mặc định)" disabled 
+                     class="w-full bg-zinc-900/50 border border-zinc-850 rounded px-3 py-2 text-xs text-zinc-500 cursor-not-allowed font-mono">
+            </div>
+            <div>
+              <label class="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1.5">Độ trễ khi tự kết nối lại</label>
+              <input type="text" value="10 giây (60s nếu kick)" disabled 
+                     class="w-full bg-zinc-900/50 border border-zinc-850 rounded px-3 py-2 text-xs text-zinc-500 cursor-not-allowed font-mono">
+            </div>
+            <div>
+              <label class="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1.5">Hỗ trợ Anti-Captcha</label>
+              <input type="text" value="Text Captcha Regex + Map Captcha" disabled 
+                     class="w-full bg-zinc-900/50 border border-zinc-850 rounded px-3 py-2 text-xs text-zinc-500 cursor-not-allowed font-mono">
+            </div>
+          </div>
+          <div class="text-[10px] text-zinc-500 border-t border-zinc-900 pt-3">
+            * Các tùy chọn nâng cao bổ sung được kế thừa tự động từ file cấu hình của server backend.
+          </div>
+        </div>
+      </div>
+
+      <!-- RADAR TAB CONTAINER -->
+      <div id="tab-pane-radar" class="tab-pane hidden space-y-6">
+        <div>
+          <h2 class="text-lg font-bold text-purpleAccent tracking-wide uppercase border-b border-zinc-800 pb-2">
+            🌍 Bản đồ quét địa hình 2D (World Radar)
+          </h2>
+          <p class="text-xs text-zinc-400 mt-1">Quét thực thể và khối địa hình ở thời gian thực xung quanh vị trí bot.</p>
+        </div>
+
+        <div class="flex flex-col lg:flex-row gap-6 items-start max-w-4xl">
+          <!-- Radar Canvas Box -->
+          <div class="bg-zinc-950 border border-zinc-900 p-4 rounded-2xl flex items-center justify-center relative w-[250px] h-[250px] shadow-2xl flex-shrink-0">
+            <canvas id="minimap-canvas" width="220" height="220" class="rounded-lg bg-black"></canvas>
+            
+            <div id="minimap-overlay-status" class="absolute inset-0 bg-zinc-950/95 flex flex-col items-center justify-center text-[10px] text-zinc-500 font-bold uppercase tracking-widest rounded-2xl text-center p-4">
+              <svg class="w-8 h-8 text-zinc-800 mb-2 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L16 4m0 13V4m0 0L9 7"></path>
+              </svg>
+              <span>Chờ bot kết nối trực tuyến...</span>
+            </div>
+          </div>
+
+          <!-- Legend details -->
+          <div class="bg-zinc-950 border border-zinc-900 p-5 rounded-2xl flex-1 w-full space-y-4 shadow-lg text-xs">
+            <h3 class="text-zinc-400 font-bold uppercase tracking-wider border-b border-zinc-900 pb-2">Chú giải thực thể</h3>
+            <div class="grid grid-cols-2 gap-3 font-mono">
+              <span class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-cyan-400 inline-block"></span> Bot (Trung tâm)</span>
+              <span class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-green-500 inline-block"></span> Người chơi (Player)</span>
+              <span class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-rose-500 inline-block"></span> Quái vật (Hostile)</span>
+              <span class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-amber-400 inline-block"></span> Động vật (Passive)</span>
+            </div>
+
+            <h3 class="text-zinc-400 font-bold uppercase tracking-wider border-b border-zinc-900 pb-2 pt-2">Khối địa hình</h3>
+            <div class="grid grid-cols-2 gap-3 font-mono text-[11px]">
+              <span class="flex items-center gap-2"><span class="w-3 h-3 bg-zinc-950 border border-zinc-800 inline-block"></span> Khí / Trống</span>
+              <span class="flex items-center gap-2"><span class="w-3 h-3 bg-green-800 inline-block"></span> Cỏ / Lá</span>
+              <span class="flex items-center gap-2"><span class="w-3 h-3 bg-slate-700 inline-block"></span> Đá / Quặng</span>
+              <span class="flex items-center gap-2"><span class="w-3 h-3 bg-blue-800 inline-block"></span> Nước</span>
+              <span class="flex items-center gap-2"><span class="w-3 h-3 bg-red-800 inline-block"></span> Dung nham</span>
+              <span class="flex items-center gap-2"><span class="w-3 h-3 bg-amber-900 inline-block"></span> Gỗ</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ABOUT TAB CONTAINER -->
+      <div id="tab-pane-about" class="tab-pane hidden space-y-6 max-w-2xl">
+        <div>
+          <h2 class="text-lg font-bold text-purpleAccent tracking-wide uppercase border-b border-zinc-800 pb-2">
+            ⚡ Về dự án Onion Client
+          </h2>
+          <p class="text-xs text-zinc-400 mt-1">Thông tin dự án và công nghệ tích hợp.</p>
+        </div>
+
+        <div class="bg-zinc-950 border border-zinc-900 p-5 rounded-2xl space-y-4 shadow-lg text-sm leading-relaxed">
+          <p>
+            <strong>Onion Client</strong> là một bảng điều khiển bot Minecraft đa chức năng lấy cảm hứng trực tiếp từ phong cách thiết kế của phần mềm cheat/hack Minecraft <strong>Salarixi</strong>.
+          </p>
+          <p>
+            Client này kết hợp sức mạnh từ framework điều khiển bot <strong>Mineflayer (Node.js)</strong> ở Backend và giao diện điều khiển hiện đại, phản hồi nhanh bằng <strong>TailwindCSS</strong> ở Frontend.
+          </p>
+          
+          <h3 class="text-xs font-bold text-purpleAccent uppercase tracking-widest pt-2">Tính năng chính được thiết lập:</h3>
+          <ul class="list-disc list-inside space-y-1.5 text-zinc-300 font-mono text-xs pl-2">
+            <li>Tự động giải text captcha và captcha bản đồ (map image captcha).</li>
+            <li>Tích hợp camera xem góc nhìn thứ nhất dạng 3D (prismarine-viewer).</li>
+            <li>Bản đồ quét radar địa hình 2D thời gian thực.</li>
+            <li>Mô-đun tấn công tự động (Killaura) tích hợp plugin mineflayer-pvp.</li>
+            <li>Mô-đun tự động ăn (Auto-Eat) và tự trang bị giáp (Auto-Armor).</li>
+          </ul>
+        </div>
+      </div>
+
+    </main>
+
+    <!-- RIGHT PERSISTENT PANEL: 3D VIEWPORT, HP, COORDINATES & CONSOLE LOG -->
+    <aside class="w-[420px] bg-zinc-950/65 border-l border-zinc-900 p-4 flex flex-col gap-4 overflow-y-auto custom-scrollbar flex-shrink-0 relative z-25 h-full">
+      
+      <!-- Section 1: Connection & Survival Stats -->
+      <section class="bg-zinc-900/40 border border-zinc-900 rounded-xl p-3.5 space-y-3 shadow-md">
+        
+        <!-- Connection Status & Pulse -->
+        <div class="flex items-center justify-between">
+          <div class="flex items-center space-x-2.5">
+            <span id="bot-pulse" class="flex h-2.5 w-2.5 relative">
+              <span id="bot-pulse-ring" class="animate-ping absolute inline-flex h-full w-full rounded-full bg-zinc-650 opacity-75"></span>
+              <span id="bot-dot" class="relative inline-flex rounded-full h-2.5 w-2.5 bg-zinc-650"></span>
+            </span>
+            <div>
+              <span id="bot-status-text" class="text-xs font-bold text-zinc-500 tracking-wider">OFFLINE</span>
+            </div>
+          </div>
+          
+          <!-- Coordinates Label -->
+          <div class="text-[10px] font-mono bg-zinc-950 px-2 py-1 rounded border border-zinc-900 flex items-center space-x-1">
+            <span class="text-zinc-600 font-normal">X:</span>
+            <span id="coord-x" class="text-purpleAccent font-semibold min-w-[26px]">0</span>
+            <span class="text-zinc-600 font-normal">Y:</span>
+            <span id="coord-y" class="text-purpleAccent font-semibold min-w-[20px]">0</span>
+            <span class="text-zinc-600 font-normal">Z:</span>
+            <span id="coord-z" class="text-purpleAccent font-semibold min-w-[26px]">0</span>
+          </div>
+        </div>
+
+        <!-- Connection description (Detailed Kick Reason / Connection Status) -->
+        <div class="bg-zinc-950/80 border-l-2 border-purpleAccent p-2 rounded text-[11px] font-mono text-zinc-400 leading-normal break-words">
+          <span class="text-[9px] uppercase font-bold text-zinc-500 block mb-0.5 tracking-wider">Thông báo chi tiết</span>
+          <span id="bot-status-desc">Chờ kết nối bot...</span>
+        </div>
+
+        <!-- Health & Food bars in grid -->
+        <div class="grid grid-cols-2 gap-3.5 border-t border-zinc-900/60 pt-3">
+          <!-- HP bar -->
+          <div>
+            <div class="flex justify-between items-center text-[9px] mb-1 font-bold uppercase tracking-wider text-zinc-500">
+              <span>❤ Health</span>
+              <span id="stat-health-val" class="font-mono text-rose-500">0/20</span>
+            </div>
+            <div class="w-full bg-zinc-950 rounded-full h-1.5 overflow-hidden border border-zinc-900">
+              <div id="stat-health-bar" class="bg-rose-500 h-full rounded-full transition-all duration-350" style="width: 0%"></div>
+            </div>
+          </div>
+
+          <!-- Food bar -->
+          <div>
+            <div class="flex justify-between items-center text-[9px] mb-1 font-bold uppercase tracking-wider text-zinc-500">
+              <span>🍖 Food</span>
+              <span id="stat-food-val" class="font-mono text-amber-500">0/20</span>
+            </div>
+            <div class="w-full bg-zinc-950 rounded-full h-1.5 overflow-hidden border border-zinc-900">
+              <div id="stat-food-bar" class="bg-amber-500 h-full rounded-full transition-all duration-350" style="width: 0%"></div>
+            </div>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- Section 2: Live 3D Camera Frame -->
+      <section class="bg-zinc-900/40 border border-zinc-900 rounded-xl p-3.5 shadow-md flex flex-col">
+        <h3 class="text-[10px] font-bold uppercase tracking-widest text-zinc-500 mb-2 flex items-center gap-1.5">
+          🎥 Camera 3D (Góc nhìn bot)
+        </h3>
+        <div class="relative bg-zinc-950 border border-zinc-900 rounded-lg overflow-hidden h-[180px] flex items-center justify-center shadow-inner">
+          <iframe id="camera-frame" src="" class="absolute inset-0 w-full h-full border-none hidden"></iframe>
+          
+          <div id="camera-overlay" class="absolute inset-0 bg-zinc-950/95 flex flex-col items-center justify-center text-[9px] text-zinc-500 font-bold uppercase tracking-widest rounded-lg text-center p-3">
+            <svg class="w-6 h-6 text-zinc-900 mb-1.5 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+            </svg>
+            <span id="camera-status-text">Kết nối bot để tải camera 3D...</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section 2.5: Bot Movement & Rotation Controls -->
+      <section class="bg-zinc-900/40 border border-zinc-900 rounded-xl p-3.5 shadow-md flex flex-col flex-shrink-0">
+        <h3 class="text-[10px] font-bold uppercase tracking-widest text-zinc-500 mb-2.5 flex items-center gap-1.5">
+          🎮 Điều khiển Bot (Controls)
+        </h3>
+        
+        <div class="flex flex-col gap-3">
+          <div class="flex items-center justify-between gap-2">
+            <!-- WASD Pad (Left part) -->
+            <div class="flex flex-col items-center gap-1 flex-1">
+              <span class="text-[8px] font-bold text-zinc-500 uppercase tracking-widest">Di chuyển (Move)</span>
+              <div class="grid grid-cols-3 gap-1 w-[108px]">
+                <!-- Row 1 -->
+                <div></div>
+                <button id="btn-move-forward" class="w-8.5 h-8.5 bg-zinc-950 border border-zinc-850 hover:border-purpleAccent rounded-lg flex items-center justify-center text-zinc-400 hover:text-white transition select-none active:scale-95 text-xs" title="Đi thẳng (W)">
+                  ▲
+                </button>
+                <div></div>
+
+                <!-- Row 2 -->
+                <button id="btn-move-left" class="w-8.5 h-8.5 bg-zinc-950 border border-zinc-850 hover:border-purpleAccent rounded-lg flex items-center justify-center text-zinc-400 hover:text-white transition select-none active:scale-95 text-xs" title="Đi trái (A)">
+                  ◀
+                </button>
+                <div class="w-8.5 h-8.5 bg-zinc-900/40 rounded-lg flex items-center justify-center text-[8px] font-mono text-zinc-600 select-none font-bold">
+                  WASD
+                </div>
+                <button id="btn-move-right" class="w-8.5 h-8.5 bg-zinc-950 border border-zinc-850 hover:border-purpleAccent rounded-lg flex items-center justify-center text-zinc-400 hover:text-white transition select-none active:scale-95 text-xs" title="Đi phải (D)">
+                  ▶
+                </button>
+
+                <!-- Row 3 -->
+                <div></div>
+                <button id="btn-move-back" class="w-8.5 h-8.5 bg-zinc-950 border border-zinc-850 hover:border-purpleAccent rounded-lg flex items-center justify-center text-zinc-400 hover:text-white transition select-none active:scale-95 text-xs" title="Đi lùi (S)">
+                  ▼
+                </button>
+                <div></div>
+              </div>
+            </div>
+
+            <!-- Divider -->
+            <div class="w-[1px] h-16 bg-zinc-900 self-center"></div>
+
+            <!-- Look Pad (Right part) -->
+            <div class="flex flex-col items-center gap-1 flex-1">
+              <span class="text-[8px] font-bold text-zinc-500 uppercase tracking-widest">Xoay nhìn (Look)</span>
+              <div class="grid grid-cols-3 gap-1 w-[108px]">
+                <!-- Row 1 -->
+                <div></div>
+                <button id="btn-look-up" class="w-8.5 h-8.5 bg-zinc-950 border border-zinc-850 hover:border-purpleAccent rounded-lg flex items-center justify-center text-zinc-400 hover:text-white transition select-none active:scale-95 text-xs" title="Nhìn lên (Mũi tên lên)">
+                  ▲
+                </button>
+                <div></div>
+
+                <!-- Row 2 -->
+                <button id="btn-look-left" class="w-8.5 h-8.5 bg-zinc-950 border border-zinc-850 hover:border-purpleAccent rounded-lg flex items-center justify-center text-zinc-400 hover:text-white transition select-none active:scale-95 text-xs" title="Xoay trái (Mũi tên trái)">
+                  ◀
+                </button>
+                <div class="w-8.5 h-8.5 bg-zinc-900/40 rounded-lg flex items-center justify-center text-[8px] font-mono text-zinc-600 select-none font-bold">
+                  LOOK
+                </div>
+                <button id="btn-look-right" class="w-8.5 h-8.5 bg-zinc-950 border border-zinc-850 hover:border-purpleAccent rounded-lg flex items-center justify-center text-zinc-400 hover:text-white transition select-none active:scale-95 text-xs" title="Xoay phải (Mũi tên phải)">
+                  ▶
+                </button>
+
+                <!-- Row 3 -->
+                <div></div>
+                <button id="btn-look-down" class="w-8.5 h-8.5 bg-zinc-950 border border-zinc-850 hover:border-purpleAccent rounded-lg flex items-center justify-center text-zinc-400 hover:text-white transition select-none active:scale-95 text-xs" title="Nhìn xuống (Mũi tên xuống)">
+                  ▼
+                </button>
+                <div></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Actions Grid -->
+          <div class="grid grid-cols-4 gap-1.5">
+            <button id="btn-move-jump" class="bg-zinc-950 hover:border-purpleAccent border border-zinc-850 text-[9px] text-zinc-400 hover:text-white font-bold uppercase tracking-wider py-2 rounded-lg transition active:scale-95 flex items-center justify-center gap-0.5" title="Nhảy lên (Space)">
+              <span>Nhảy (Spc)</span>
+            </button>
+            <button id="btn-move-sneak" class="bg-zinc-950 hover:border-purpleAccent border border-zinc-850 text-[9px] text-zinc-400 hover:text-white font-bold uppercase tracking-wider py-2 rounded-lg transition active:scale-95 flex items-center justify-center gap-0.5" title="Cúi người (Shift)">
+              <span>Cúi (Shf)</span>
+            </button>
+            <button id="btn-move-sprint" class="bg-zinc-950 hover:border-purpleAccent border border-zinc-850 text-[9px] text-zinc-400 hover:text-white font-bold uppercase tracking-wider py-2 rounded-lg transition active:scale-95 flex items-center justify-center gap-0.5" title="Chạy nhanh (Control)">
+              <span>Chạy (Ctrl)</span>
+            </button>
+            <button id="btn-move-stop" class="bg-red-950/20 hover:bg-red-950/40 text-red-500 border border-red-900/40 text-[9px] font-bold uppercase tracking-wider py-2 rounded-lg transition active:scale-95 flex items-center justify-center gap-0.5" title="Dừng mọi di chuyển">
+              <span>Dừng (Stop)</span>
+            </button>
+          </div>
+        </div>
+
+        <p class="text-[9px] text-zinc-500 mt-2.5 leading-normal text-center">
+          * Bàn phím: <strong>WASD</strong> để đi, <strong>Space</strong> nhảy, <strong>Shift</strong> cúi, <strong>Ctrl</strong> chạy.<br>
+          * Nhìn xung quanh: Các phím <strong>mũi tên</strong> (Up/Down/Left/Right).
+        </p>
+      </section>
+
+      <!-- Section 3: Cyberpunk Game Console / Log (Fills remaining height) -->
+      <section class="bg-zinc-900/40 border border-zinc-900 rounded-xl p-3.5 shadow-md flex flex-col flex-1 min-h-[260px] overflow-hidden">
+        <div class="flex items-center justify-between mb-1.5 flex-shrink-0">
+          <h3 class="text-[10px] font-bold uppercase tracking-widest text-zinc-500 flex items-center gap-1.5">
+            💬 Game Console (Chat Log)
+          </h3>
+          <button id="btn-clear-chat" class="text-[9px] font-bold text-zinc-500 hover:text-purpleAccent transition px-2 py-0.5 bg-zinc-900 border border-zinc-850 rounded uppercase tracking-wider font-mono">
+            Xóa
+          </button>
+        </div>
+
+        <!-- Chat Log Tabs -->
+        <div class="flex border-b border-zinc-900 mb-2 flex-shrink-0 gap-0.5">
+          <button id="tab-chat-all" class="chat-tab-btn active px-2.5 py-1 text-[8.5px] font-bold uppercase tracking-wider text-purpleAccent border-b border-purpleAccent transition select-none">
+            Tất cả
+          </button>
+          <button id="tab-chat-public" class="chat-tab-btn px-2.5 py-1 text-[8.5px] font-bold uppercase tracking-wider text-zinc-550 hover:text-zinc-350 transition select-none">
+            Kênh chung
+          </button>
+          <button id="tab-chat-private" class="chat-tab-btn px-2.5 py-1 text-[8.5px] font-bold uppercase tracking-wider text-zinc-550 hover:text-zinc-350 transition select-none flex items-center gap-1">
+            Nhắn riêng
+            <span id="private-badge" class="hidden bg-purpleAccent text-white text-[7.5px] font-bold px-1 rounded-full animate-pulse">0</span>
+          </button>
+          <button id="tab-chat-system" class="chat-tab-btn px-2.5 py-1 text-[8.5px] font-bold uppercase tracking-wider text-zinc-550 hover:text-zinc-350 transition select-none">
+            Hệ thống
+          </button>
+        </div>
+
+        <!-- Terminal Chat Log -->
+        <div id="chat-log" class="flex-1 bg-zinc-950 border border-zinc-900 rounded-lg p-3 overflow-y-auto font-mono text-[11px] space-y-1.5 scrollbar-thin shadow-inner custom-scrollbar">
+          <div class="text-zinc-600 italic">System: Console initialized. Awaiting connection...</div>
+        </div>
+
+        <!-- Captcha Image Display Overlay if detected -->
+        <div id="captcha-container" class="hidden bg-zinc-950 border border-purpleAccent/30 rounded-lg p-2 mt-2 flex items-center justify-between gap-3 flex-shrink-0 shadow-lg border-purple-glow">
+          <div class="flex items-center gap-2">
+            <div class="bg-zinc-900 border border-zinc-850 p-0.5 rounded">
+              <img id="captcha-img" src="" alt="Captcha Map" class="w-14 h-14 object-contain pixelated border border-zinc-800 rounded">
+            </div>
+            <div>
+              <h4 class="text-[10px] font-bold text-purpleGlow uppercase tracking-widest">🧩 Captcha Bản đồ</h4>
+              <p class="text-[9px] text-zinc-400 mt-0.5 leading-tight">Đọc mã trên bản đồ và gửi vào chat.</p>
+            </div>
+          </div>
+          <button id="btn-close-captcha" class="text-[8px] font-bold text-zinc-500 hover:text-zinc-300 px-2 py-1 bg-zinc-900 border border-zinc-800 rounded uppercase">
+            Ẩn
+          </button>
+        </div>
+
+        <!-- Input Bar -->
+        <div class="mt-2.5 flex gap-1.5 flex-shrink-0">
+          <input type="text" id="chat-input" disabled placeholder="Chờ kết nối bot..." 
+                 class="flex-1 bg-zinc-950 border border-zinc-900 rounded px-3 py-1.5 text-xs text-zinc-300 focus:outline-none focus-purple-glow transition disabled:opacity-40 disabled:cursor-not-allowed font-mono">
+          <button id="btn-send-chat" disabled
+                  class="bg-zinc-900 text-zinc-550 border border-zinc-850 font-bold uppercase tracking-widest text-[9px] px-3.5 py-1.5 rounded cursor-not-allowed transition active:scale-95 flex items-center justify-center">
+            Gửi
+          </button>
+        </div>
+      </section>
+
+    </aside>
+
+  </div>
+
+  <!-- Inline Tab Switching Script -->
+  <script>
+    function switchTab(tabId) {
+      // Hide all panes
+      document.querySelectorAll('.tab-pane').forEach(pane => {
+        pane.classList.add('hidden');
+      });
+      // Deactivate all buttons
+      document.querySelectorAll('.pretty-btn').forEach(btn => {
+        btn.className = 'pretty-btn flex items-center space-x-3 w-full px-3 py-2 text-sm rounded font-medium text-zinc-400 hover:bg-zinc-900/40 hover:text-zinc-200 text-left';
+        // Reset svg color
+        const svg = btn.querySelector('svg');
+        if (svg) svg.classList.remove('text-purpleAccent');
+      });
+      
+      // Show target pane
+      const targetPane = document.getElementById('tab-pane-' + tabId);
+      if (targetPane) targetPane.classList.remove('hidden');
+      
+      // Activate target button
+      const targetBtn = document.getElementById('tab-btn-' + tabId);
+      if (targetBtn) {
+        targetBtn.className = 'pretty-btn selected flex items-center space-x-3 w-full px-3 py-2 text-sm rounded font-medium text-left';
+        const svg = targetBtn.querySelector('svg');
+        if (svg) svg.classList.add('text-purpleAccent');
+      }
+    }
+  </script>
+
+  <!-- INVENTORY ACTION MODAL -->
+  <div id="inv-action-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+    <div class="bg-zinc-950 border border-zinc-900 rounded-2xl w-80 p-5 shadow-2xl space-y-4 border-purple-glow">
+      <div class="flex justify-between items-start">
+        <div class="flex-1 flex flex-col items-center">
+          <span id="inv-action-item-emoji" class="text-3xl block text-center mb-1">⚔️</span>
+          <h4 id="inv-action-item-name" class="text-sm font-bold text-zinc-200 text-center tracking-wide block">Tên vật phẩm</h4>
+          <span id="inv-action-item-slot" class="text-[10px] text-zinc-500 font-mono text-center block mt-1">Slot: #36</span>
+        </div>
+        <button id="btn-close-inv-modal" class="text-zinc-500 hover:text-zinc-300 transition">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+        </button>
+      </div>
+
+      <div class="flex flex-col space-y-2 pt-2">
+        <button id="btn-inv-equip-hand" class="bg-purpleAccent hover:bg-purpleGlow text-white text-xs font-bold uppercase tracking-widest py-2.5 rounded-lg transition active:scale-95 text-center flex items-center justify-center gap-1.5 shadow-md">
+          Cầm tay chính
+        </button>
+        <button id="btn-inv-equip-offhand" class="bg-zinc-900 hover:bg-zinc-850 text-zinc-300 border border-zinc-800 text-xs font-bold uppercase tracking-widest py-2.5 rounded-lg transition active:scale-95 text-center flex items-center justify-center gap-1.5">
+          Cầm tay phụ
+        </button>
+        <button id="btn-inv-use" class="bg-zinc-900 hover:bg-zinc-850 text-zinc-300 border border-zinc-800 text-xs font-bold uppercase tracking-widest py-2.5 rounded-lg transition active:scale-95 text-center flex items-center justify-center gap-1.5">
+          Sử dụng / Ăn / Uống
+        </button>
+        <button id="btn-inv-drop" class="bg-red-950/20 hover:bg-red-950/40 text-red-500 border border-red-900/40 text-xs font-bold uppercase tracking-widest py-2.5 rounded-lg transition active:scale-95 text-center flex items-center justify-center gap-1.5">
+          Vứt bỏ (Toss Stack)
+        </button>
       </div>
     </div>
+  </div>
 
-  </main>
-
-  <!-- Footer -->
-  <footer class="border-t border-slate-900 bg-slate-950 py-4 shrink-0">
-    <div class="max-w-7xl mx-auto px-4 text-center text-xs text-slate-600">
-      Minecraft Bot Control Panel - Phát triển bởi Antigravity. Node.js + Socket.io + Mineflayer.
-    </div>
-  </footer>
-
-  <!-- Socket.io Client qua CDN -->
+  <!-- Socket.io Client -->
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
-  <!-- Logic JS của ứng dụng -->
+  <!-- Main logic -->
   <script src="app.js"></script>
 </body>
 </html>
+
