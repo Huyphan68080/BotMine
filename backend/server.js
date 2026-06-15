@@ -508,8 +508,8 @@ io.on('connection', (socket) => {
       return;
     }
 
-    // Xử lý sự kiện ngắt kết nối chung (kicked, end, error)
     function handleBotDisconnect(reasonText, isError = false) {
+      console.log(`[Bot] handleBotDisconnect [${socketId}] - Lý do: ${reasonText}. Trạng thái timer: ${reconnectTimers[socketId] ? 'Đang có' : 'Chưa có'}`);
       if (loginTimeoutTimer) {
         clearTimeout(loginTimeoutTimer);
         loginTimeoutTimer = null;
@@ -532,6 +532,16 @@ io.on('connection', (socket) => {
 
       // Nếu người dùng bật Auto Reconnect, thực hiện đếm ngược kết nối lại
       if (autoReconnect) {
+        // Nếu bị Timeout 25s, không tự động kết nối lại để tránh spam làm tăng thời gian khóa của proxy
+        if (reasonText.includes('Timeout 25s')) {
+          console.log(`[Bot] Ngắt kết nối do Timeout 25s. Tạm dừng tự động kết nối lại để tránh bị khóa IP/Tên.`);
+          socket.emit('bot-status', { 
+            status: 'error', 
+            message: `${reasonText}. Đã tắt Auto-Reconnect. Vui lòng đổi tên Bot hoặc đợi 1 phút.` 
+          });
+          return;
+        }
+
         if (!reconnectTimers[socketId]) {
           // Xác định thời gian chờ kết nối lại (mặc định 10s, nếu bị kick để rejoin thì chờ 25s để tránh rate limit của Bungee/TCPShield)
           const isRejoinKick = reasonText.toLowerCase().includes('rejoin') || reasonText.toLowerCase().includes('solved');
