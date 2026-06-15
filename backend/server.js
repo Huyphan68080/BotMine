@@ -533,10 +533,15 @@ io.on('connection', (socket) => {
       // Nếu người dùng bật Auto Reconnect, thực hiện đếm ngược kết nối lại
       if (autoReconnect) {
         if (!reconnectTimers[socketId]) {
-          console.log(`[Bot] Bot của ${socketId} bị ngắt kết nối. Đang tự động kết nối lại sau 10 giây...`);
+          // Xác định thời gian chờ kết nối lại (mặc định 10s, nếu bị kick để rejoin thì chờ 25s để tránh rate limit của Bungee/TCPShield)
+          const isRejoinKick = reasonText.toLowerCase().includes('rejoin') || reasonText.toLowerCase().includes('solved');
+          const delayMs = isRejoinKick ? 25000 : 10000;
+          const delaySec = delayMs / 1000;
+
+          console.log(`[Bot] Bot của ${socketId} bị ngắt kết nối. Đang tự động kết nối lại sau ${delaySec} giây...`);
           socket.emit('bot-status', { 
             status: 'connecting', 
-            message: `${reasonText}. Tự động kết nối lại sau 10s...` 
+            message: `${reasonText}. Tự động kết nối lại sau ${delaySec}s...` 
           });
 
           reconnectTimers[socketId] = setTimeout(() => {
@@ -544,7 +549,7 @@ io.on('connection', (socket) => {
             if (socket.connected) {
               connectBot(config);
             }
-          }, 10000);
+          }, delayMs);
         }
       } else {
         socket.emit('bot-status', { 
