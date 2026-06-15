@@ -14,6 +14,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const serverPortInput = document.getElementById('server-port');
   const minecraftVersionSelect = document.getElementById('minecraft-version');
   const botUsernameInput = document.getElementById('bot-username');
+  const botPasswordInput = document.getElementById('bot-password');
 
   const btnConnectBot = document.getElementById('btn-connect-bot');
   const btnDisconnectBot = document.getElementById('btn-disconnect-bot');
@@ -52,6 +53,7 @@ document.addEventListener('DOMContentLoaded', () => {
   serverIpInput.value = localStorage.getItem('mc_bot_host') || '';
   serverPortInput.value = localStorage.getItem('mc_bot_port') || '25565';
   botUsernameInput.value = localStorage.getItem('mc_bot_username') || '';
+  if (botPasswordInput) botPasswordInput.value = localStorage.getItem('mc_bot_password') || '';
   minecraftVersionSelect.value = localStorage.getItem('mc_bot_version') || 'auto';
   
   const authTypeSelect = document.getElementById('auth-type');
@@ -213,6 +215,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const host = serverIpInput.value.trim();
     const port = serverPortInput.value.trim();
     const username = botUsernameInput.value.trim();
+    const password = botPasswordInput ? botPasswordInput.value.trim() : '';
     const version = minecraftVersionSelect.value;
     
     const auth = authTypeSelect ? authTypeSelect.value : 'offline';
@@ -227,12 +230,13 @@ document.addEventListener('DOMContentLoaded', () => {
     localStorage.setItem('mc_bot_host', host);
     localStorage.setItem('mc_bot_port', port);
     localStorage.setItem('mc_bot_username', username);
+    localStorage.setItem('mc_bot_password', password);
     localStorage.setItem('mc_bot_version', version);
     localStorage.setItem('mc_bot_auth', auth);
     localStorage.setItem('mc_bot_auto_reconnect', autoReconnect);
 
     // Gửi sự kiện `start-bot` kèm đầy đủ cấu hình nâng cao
-    socket.emit('start-bot', { host, port, username, version, auth, autoReconnect });
+    socket.emit('start-bot', { host, port, username, password, version, auth, autoReconnect });
     appendChatLog('System', `Yêu cầu kết nối bot [${username}] tới ${host}:${port || '25565'} (Auth: ${auth})...`, 'system');
   });
 

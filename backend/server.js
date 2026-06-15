@@ -165,6 +165,46 @@ function checkAndSolveCaptcha(messageStr, bot) {
   }
 }
 
+// Hàm tự động phát hiện và thực hiện Đăng ký / Đăng nhập (AuthMe) bảo mật
+function checkAndHandleAuth(messageStr, bot, password) {
+  if (!messageStr || !bot || !password) return;
+
+  const cleanMsg = messageStr.toLowerCase();
+  
+  // Tránh bị người chơi dụ dỗ bằng cách bỏ qua tin nhắn có dạng chat thường
+  const playerChatRegex = /^[\[\(]?[a-zA-Z0-9_]{3,16}[\]\)]?\s*[:>→-]/; 
+  if (playerChatRegex.test(messageStr)) {
+    return;
+  }
+
+  // 1. Kiểm tra yêu cầu Đăng ký (Register)
+  if (cleanMsg.includes('/register') || cleanMsg.includes('/reg') || 
+      (cleanMsg.includes('đăng ký') && (cleanMsg.includes('mật khẩu') || cleanMsg.includes('mat khau')))) {
+    console.log(`[Auto-Auth] Phát hiện yêu cầu đăng ký tài khoản. Đang gửi /register...`);
+    setTimeout(() => {
+      try {
+        bot.chat(`/register ${password} ${password}`);
+      } catch (err) {
+        console.error('[Auto-Auth] Gửi lệnh register thất bại:', err.message);
+      }
+    }, 1500);
+    return;
+  }
+
+  // 2. Kiểm tra yêu cầu Đăng nhập (Login)
+  if (cleanMsg.includes('/login') || cleanMsg.includes('/l ') || cleanMsg.includes('đăng nhập') || cleanMsg.includes('dang nhap')) {
+    console.log(`[Auto-Auth] Phát hiện yêu cầu đăng nhập. Đang gửi /login...`);
+    setTimeout(() => {
+      try {
+        bot.chat(`/login ${password}`);
+      } catch (err) {
+        console.error('[Auto-Auth] Gửi lệnh login thất bại:', err.message);
+      }
+    }, 1500);
+    return;
+  }
+}
+
 // Bảng màu cơ bản của Bản đồ Minecraft (Minecraft Map Colors)
 const baseColors = [
   [0, 0, 0],         // 0: transparent
@@ -346,7 +386,7 @@ io.on('connection', (socket) => {
 
   // Hàm khởi tạo và quản lý kết nối bot Minecraft
   function connectBot(config) {
-    const { host, port, username, version, auth, autoReconnect } = config;
+    const { host, port, username, password, version, auth, autoReconnect } = config;
     const socketId = socket.id;
 
     // Lưu các tên thực thể đã log để tránh gửi trùng lặp
@@ -399,9 +439,10 @@ io.on('connection', (socket) => {
       });
       
       checkAndSolveCaptcha(cleanName, bot);
+      checkAndHandleAuth(cleanName, bot, password);
     }
 
-    console.log(`[Bot] Khởi tạo kết nối cho ${socketId} -> ${host}:${port || 25565} [Auth: ${auth || 'offline'}, AutoReconnect: ${autoReconnect}]`);
+    console.log(`[Bot] Khởi tạo kết nối cho ${socketId} -> ${host}:${port || 25565} [Auth: ${auth || 'offline'}, Version: ${version}, AutoReconnect: ${autoReconnect}]`);
 
     // Dừng bot cũ nếu có
     if (activeBots[socketId]) {
@@ -603,6 +644,7 @@ io.on('connection', (socket) => {
                       time: new Date().toLocaleTimeString('vi-VN', { hour12: false })
                     });
                     checkAndSolveCaptcha(text, bot);
+                    checkAndHandleAuth(text, bot, password);
                   }
                 }
               }
@@ -696,6 +738,7 @@ io.on('connection', (socket) => {
                   time: new Date().toLocaleTimeString('vi-VN', { hour12: false })
                 });
                 checkAndSolveCaptcha(text, bot);
+                checkAndHandleAuth(text, bot, password);
               }
             }
           }
@@ -761,6 +804,7 @@ io.on('connection', (socket) => {
       
       // Tự động kiểm tra và giải captcha nếu có
       checkAndSolveCaptcha(messageStr, bot);
+      checkAndHandleAuth(messageStr, bot, password);
 
       const isNormalChat = messageStr.includes('<') && messageStr.includes('>');
       if (!isNormalChat) {
@@ -792,6 +836,7 @@ io.on('connection', (socket) => {
       
       // Kiểm tra xem tiêu đề có chứa captcha không
       checkAndSolveCaptcha(text, bot);
+      checkAndHandleAuth(text, bot, password);
     });
 
     // 5.7. Lắng nghe ActionBar (thông tin trên thanh công cụ)
@@ -813,6 +858,7 @@ io.on('connection', (socket) => {
       
       // Kiểm tra xem ActionBar có chứa captcha không
       checkAndSolveCaptcha(text, bot);
+      checkAndHandleAuth(text, bot, password);
     });
 
     // 5.8. Lắng nghe BossBar (thanh Boss trên cùng)
@@ -834,6 +880,7 @@ io.on('connection', (socket) => {
       
       // Kiểm tra xem BossBar có chứa captcha không
       checkAndSolveCaptcha(text, bot);
+      checkAndHandleAuth(text, bot, password);
     });
 
     bot.on('bossBarUpdated', (bossBar) => {
@@ -854,6 +901,7 @@ io.on('connection', (socket) => {
       
       // Kiểm tra xem BossBar có chứa captcha không
       checkAndSolveCaptcha(text, bot);
+      checkAndHandleAuth(text, bot, password);
     });
 
     // 5.9. Lắng nghe và bóc tách chữ trên các thực thể Hologram (ArmorStand, TextDisplay)
@@ -883,6 +931,7 @@ io.on('connection', (socket) => {
                 time: new Date().toLocaleTimeString('vi-VN', { hour12: false })
               });
               checkAndSolveCaptcha(text, bot);
+              checkAndHandleAuth(text, bot, password);
             }
           }
         }, 500);
