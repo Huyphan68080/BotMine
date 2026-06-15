@@ -530,6 +530,7 @@ io.on('connection', (socket) => {
     let bot;
     try {
       bot = mineflayer.createBot(botOptions);
+      bot.entity = { id: -1 }; // Khởi tạo để tránh crash lỗi entity_status khi chưa login
       activeBots[socketId] = bot;
       botConfigs[socketId] = config; // Lưu cấu hình lại để reconect
 
