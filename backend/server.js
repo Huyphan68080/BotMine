@@ -554,8 +554,14 @@ io.on('connection', (socket) => {
 
     function handleBotDisconnect(reasonText, isError = false) {
       let finalReasonText = reasonText;
-      if (!hasLoggedIn && reasonText.includes('socketClosed')) {
-        finalReasonText = 'Lỗi: Server đóng kết nối ngay lập tức (Có thể do sai phiên bản, sai loại Auth hoặc bị chặn IP/Anti-bot)';
+      if (!hasLoggedIn) {
+        if (reasonText.includes('ECONNREFUSED')) {
+          finalReasonText = 'Lỗi: Server đang Offline hoặc Cổng (Port) không chính xác';
+        } else if (reasonText.includes('ETIMEDOUT')) {
+          finalReasonText = 'Lỗi: Không thể kết nối tới Server (Server Offline hoặc bị Tường lửa chặn)';
+        } else if (reasonText.includes('ECONNRESET') || reasonText.includes('socketClosed')) {
+          finalReasonText = 'Lỗi: Server từ chối kết nối ngay lập tức (Có thể do sai phiên bản, sai loại Auth hoặc bị chặn IP/Anti-bot)';
+        }
       }
 
       console.log(`[Bot] handleBotDisconnect [${socketId}] - Lý do: ${finalReasonText}. Trạng thái timer: ${reconnectTimers[socketId] ? 'Đang có' : 'Chưa có'}`);
