@@ -94,3 +94,10 @@ Khi nhấn chuột vào một khu vực trống trên Web Control Panel (đảm 
     *   Khi bot nhận được bản đồ chứa ảnh captcha từ server Minecraft, một lớp phủ popup ảnh sẽ tự động hiện lên trên giao diện web. Hãy quan sát ảnh đó và nhập mã vào khung chat bên dưới để giải quyết thủ công nếu regex không nhận dạng được.
 3.  **Lobby Auto-Jump:**
     *   Hệ thống sẽ tự động quét menu "Chọn máy chủ" khi bot vào sảnh chờ (Lobby) và click vào Survival Chill để đưa bot vào máy chủ chính mà không cần bạn can tiệp thủ công.
+
+---
+
+<p align="center">
+  <b>© 2026 Huy Phan. All rights reserved.</b><br>
+  <sub>Sản phẩm được tối ưu hóa và phát triển bởi Huy Phan.</sub>
+</p>
