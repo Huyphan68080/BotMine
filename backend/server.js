@@ -351,6 +351,7 @@ io.on('connection', (socket) => {
 
     // Lưu các tên thực thể đã log để tránh gửi trùng lặp
     const loggedEntityNames = {};
+    let loginTimeoutTimer = null;
 
     function handleMapPacket(packet) {
       if (!packet) return;
@@ -449,6 +450,16 @@ io.on('connection', (socket) => {
       activeBots[socketId] = bot;
       botConfigs[socketId] = config; // Lưu cấu hình lại để reconect
 
+      // Cấu hình timeout kết nối nếu sau 25 giây chưa đăng nhập thành công
+      loginTimeoutTimer = setTimeout(() => {
+        console.log(`[Bot] Kết nối tới ${host}:${port} quá thời gian chờ (25s). Tiến hành đóng kết nối.`);
+        try {
+          bot.end();
+        } catch (e) {
+          console.error('[Bot] Lỗi khi đóng bot do timeout:', e.message);
+        }
+        handleBotDisconnect('Lỗi: Kết nối quá thời gian chờ (Timeout 25s)');
+      }, 25000);
 
     } catch (error) {
       console.error('[Bot] Khởi tạo mineflayer thất bại:', error.message);
@@ -458,6 +469,11 @@ io.on('connection', (socket) => {
 
     // Xử lý sự kiện ngắt kết nối chung (kicked, end, error)
     function handleBotDisconnect(reasonText, isError = false) {
+      if (loginTimeoutTimer) {
+        clearTimeout(loginTimeoutTimer);
+        loginTimeoutTimer = null;
+      }
+
       // Xóa bộ quét định kỳ captcha
       if (scanIntervals[socketId]) {
         clearInterval(scanIntervals[socketId]);
@@ -476,10 +492,10 @@ io.on('connection', (socket) => {
       // Nếu người dùng bật Auto Reconnect, thực hiện đếm ngược kết nối lại
       if (autoReconnect) {
         if (!reconnectTimers[socketId]) {
-          console.log(`[Bot] Bot của ${socketId} bị ngắt kết nối. Đang tự động kết nối lại sau 5 giây...`);
+          console.log(`[Bot] Bot của ${socketId} bị ngắt kết nối. Đang tự động kết nối lại sau 10 giây...`);
           socket.emit('bot-status', { 
             status: 'connecting', 
-            message: `${reasonText}. Tự động kết nối lại sau 5s...` 
+            message: `${reasonText}. Tự động kết nối lại sau 10s...` 
           });
 
           reconnectTimers[socketId] = setTimeout(() => {
@@ -487,7 +503,7 @@ io.on('connection', (socket) => {
             if (socket.connected) {
               connectBot(config);
             }
-          }, 5000);
+          }, 10000);
         }
       } else {
         socket.emit('bot-status', { 
@@ -501,6 +517,11 @@ io.on('connection', (socket) => {
 
     // 0. Khi bot đã đăng nhập thành công vào server (chưa spawn)
     bot.on('login', () => {
+      if (loginTimeoutTimer) {
+        clearTimeout(loginTimeoutTimer);
+        loginTimeoutTimer = null;
+      }
+
       console.log(`[Bot] Bot [${bot.username}] đã đăng nhập vào server (đang chờ spawn).`);
       socket.emit('bot-status', { 
         status: 'online', 
