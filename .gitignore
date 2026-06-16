@@ -18,3 +18,8 @@ lerna-debug.log*
 # OS Metadata
 .DS_Store
 Thumbs.db
+
+# Offline Wiki files (not for GitHub repository)
+copy_to_wiki.md
+wiki_single_page.md
+

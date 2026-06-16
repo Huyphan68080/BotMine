@@ -29,10 +29,6 @@ BotMine/
 │   ├── app.js          # Xử lý sự kiện bàn phím, kết nối Socket client & vẽ DOM
 │   └── style.css       # File thiết kế CSS với hệ màu Salarixi (Tím - Hồng Neon)
 │
-├── wiki/               # Thư mục chứa tài liệu hướng dẫn Wiki (bản offline)
-│   ├── Home.md         # Trang chủ tài liệu Wiki
-│   └── Huong-dan-chi-tiet.md # Hướng dẫn phím tắt & cơ chế bảo mật
-│
 └── README.md           # Hướng dẫn cài đặt và cấu trúc thư mục dự án
 ```
 
@@ -61,6 +57,36 @@ node server.js
 
 ### 4. Mở Giao Diện Web
 Mở trực tiếp file `frontend/index.html` trong trình duyệt web của bạn để bắt đầu sử dụng.
+
+---
+
+## ─── ❖ HƯỚNG DẪN DEPLOY TRÊN CLOUD ❖ ───
+
+Để chạy dự án online hoàn toàn từ xa, bạn có thể triển khai Frontend trên **Vercel** và Backend trên **Render**.
+
+### 1. Triển khai Frontend (Vercel)
+1. Đăng nhập vào [Vercel](https://vercel.com/) và liên kết với tài khoản GitHub của bạn.
+2. Nhấp **Add New** -> **Project** và chọn repository `BotMine` của bạn.
+3. Vercel sẽ tự động phát hiện file `vercel.json` ở thư mục gốc để định tuyến toàn bộ request sang thư mục `frontend/`. 
+4. Bạn không cần thay đổi bất kỳ cấu hình mặc định nào khác, chỉ cần nhấp **Deploy**.
+5. Sau khi deploy thành công, bạn sẽ nhận được địa chỉ URL dạng `https://ten-du-an.vercel.app`.
+
+> [!TIP]
+> **Cấu hình nhanh API URL**: Bạn có thể mở giao diện panel qua liên kết kèm tham số truy vấn để tự động cấu hình và lưu địa chỉ Backend mà không cần nhập tay:
+> `https://ten-du-an.vercel.app/?backend=https://backend-cua-ban.onrender.com`
+
+### 2. Triển khai Backend (Render)
+1. Đăng nhập vào [Render](https://render.com/) và nhấp **New** -> **Web Service**.
+2. Chọn liên kết với repository `BotMine` từ GitHub.
+3. Trong cài đặt cấu hình Web Service:
+   - **Root Directory**: Nhập `backend`
+   - **Runtime**: Chọn `Node`
+   - **Build Command**: `npm install`
+   - **Start Command**: `npm start`
+4. Cấu hình **Environment Variables (Biến môi trường)**:
+   - `PORT`: (Mặc định Render tự cấp phát)
+   - `FRONTEND_URL`: Nhập địa chỉ Vercel của bạn (ví dụ: `https://ten-du-an.vercel.app`) để mở cấu hình CORS bảo mật cao. Hoặc nhập `*` để chấp nhận mọi nguồn truy cập.
+5. Nhấp **Deploy Web Service**. Render sẽ bắt đầu build và khởi chạy máy chủ backend.
 
 ---
 

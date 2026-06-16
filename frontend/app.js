@@ -86,6 +86,25 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // --- Khởi tạo Địa chỉ Backend URL ---
+  // Hỗ trợ lấy URL từ query parameter (?backend=... hoặc ?api=...) để dễ cấu hình nhanh khi deploy Vercel
+  const urlParams = new URLSearchParams(window.location.search);
+  const queryBackend = urlParams.get('backend') || urlParams.get('api');
+  if (queryBackend) {
+    const trimmedUrl = queryBackend.trim();
+    if (trimmedUrl) {
+      localStorage.setItem('mc_bot_backend_url', trimmedUrl);
+      console.log(`[Config] Đã cập nhật Backend URL từ Query Parameter: ${trimmedUrl}`);
+      
+      // Xóa query parameter trên thanh địa chỉ để URL trông sạch hơn
+      try {
+        const cleanUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
+        window.history.replaceState({ path: cleanUrl }, '', cleanUrl);
+      } catch (historyErr) {
+        console.warn('[Config] Không thể làm sạch query parameters:', historyErr.message);
+      }
+    }
+  }
+
   // Lấy URL lưu từ localStorage hoặc mặc định là server hiện tại hoặc localhost:3000
   let savedBackendUrl = localStorage.getItem('mc_bot_backend_url');
   if (!savedBackendUrl) {
