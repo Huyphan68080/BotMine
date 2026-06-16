@@ -1590,9 +1590,14 @@ io.on('connection', (socket) => {
               }
             });
 
+            const customServerKeyword = (config.lobbyServer || '').trim().toLowerCase();
             const survivalItem = window.slots.find(item => {
               if (!item) return false;
               const cleanName = getItemName(item).toLowerCase();
+              if (customServerKeyword) {
+                const keywords = customServerKeyword.split(',').map(k => k.trim()).filter(Boolean);
+                return keywords.some(k => cleanName.includes(k));
+              }
               return cleanName.includes('survival chill') || cleanName.includes('survival') || cleanName.includes('sinh tồn');
             });
 
@@ -1604,7 +1609,7 @@ io.on('connection', (socket) => {
               bot.removeListener('windowOpen', onWindowOpenEvent);
               return true;
             } else {
-              console.log('[Lobby Auto] Chưa tìm thấy cụm máy chủ Survival Chill trong các slots.');
+              console.log(`[Lobby Auto] Chưa tìm thấy cụm máy chủ matching "${customServerKeyword || 'survival/sinh tồn'}" trong các slots.`);
             }
           }
         } catch (err) {
@@ -1627,11 +1632,16 @@ io.on('connection', (socket) => {
 
         try {
           // Tìm vật phẩm Chọn Cụm trong hòm đồ
+          const customItemKeyword = (config.lobbyItem || '').trim().toLowerCase();
           const lobbyItem = bot.inventory.items().find(item => {
             if (!item) return false;
             const displayName = item.displayName ? item.displayName.toLowerCase() : '';
             const name = item.name ? item.name.toLowerCase() : '';
-            return displayName.includes('chọn cụm') || name.includes('star');
+            if (customItemKeyword) {
+              const keywords = customItemKeyword.split(',').map(k => k.trim()).filter(Boolean);
+              return keywords.some(k => displayName.includes(k) || name.includes(k));
+            }
+            return displayName.includes('chọn cụm') || name.includes('star') || displayName.includes('máy chủ') || name.includes('compass');
           });
 
           if (!lobbyItem) {

@@ -15,6 +15,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const minecraftVersionSelect = document.getElementById('minecraft-version');
   const botUsernameInput = document.getElementById('bot-username');
   const botPasswordInput = document.getElementById('bot-password');
+  const lobbyItemInput = document.getElementById('lobby-item');
+  const lobbyServerInput = document.getElementById('lobby-server');
 
   const btnConnectBot = document.getElementById('btn-connect-bot');
   const btnDisconnectBot = document.getElementById('btn-disconnect-bot');
@@ -120,6 +122,8 @@ document.addEventListener('DOMContentLoaded', () => {
   botUsernameInput.value = localStorage.getItem('mc_bot_username') || '';
   if (botPasswordInput) botPasswordInput.value = localStorage.getItem('mc_bot_password') || '';
   minecraftVersionSelect.value = localStorage.getItem('mc_bot_version') || 'auto';
+  if (lobbyItemInput) lobbyItemInput.value = localStorage.getItem('mc_bot_lobby_item') || '';
+  if (lobbyServerInput) lobbyServerInput.value = localStorage.getItem('mc_bot_lobby_server') || '';
   
   const authTypeSelect = document.getElementById('auth-type');
   const autoReconnectCheckbox = document.getElementById('auto-reconnect');
@@ -302,6 +306,8 @@ document.addEventListener('DOMContentLoaded', () => {
     
     const auth = authTypeSelect ? authTypeSelect.value : 'offline';
     const autoReconnect = autoReconnectCheckbox ? autoReconnectCheckbox.checked : true;
+    const lobbyItem = lobbyItemInput ? lobbyItemInput.value.trim() : '';
+    const lobbyServer = lobbyServerInput ? lobbyServerInput.value.trim() : '';
 
     if (!host || !username) {
       alert('Vui lòng điền đầy đủ IP Server và Tên Bot!');
@@ -316,9 +322,11 @@ document.addEventListener('DOMContentLoaded', () => {
     localStorage.setItem('mc_bot_version', version);
     localStorage.setItem('mc_bot_auth', auth);
     localStorage.setItem('mc_bot_auto_reconnect', autoReconnect);
+    localStorage.setItem('mc_bot_lobby_item', lobbyItem);
+    localStorage.setItem('mc_bot_lobby_server', lobbyServer);
 
     // Gửi sự kiện `start-bot` kèm đầy đủ cấu hình nâng cao
-    socket.emit('start-bot', { host, port, username, password, version, auth, autoReconnect });
+    socket.emit('start-bot', { host, port, username, password, version, auth, autoReconnect, lobbyItem, lobbyServer });
     appendChatLog('System', `Yêu cầu kết nối bot [${username}] tới ${host}:${port || '25565'} (Auth: ${auth})...`, 'system');
   });
 

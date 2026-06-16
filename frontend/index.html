@@ -208,12 +208,46 @@
                      class="w-full bg-zinc-900 border border-zinc-850 rounded px-3 py-2 text-xs text-zinc-200 focus:outline-none focus-purple-glow transition h-[34px]">
             </div>
 
+            <!-- Advanced Options -->
+            <div class="col-span-full border-t border-zinc-900 pt-4 mt-2">
+              <details class="group">
+                <summary class="flex justify-between items-center font-bold text-[10px] text-zinc-500 hover:text-purpleAccent transition uppercase tracking-widest cursor-pointer select-none outline-none">
+                  <span>Cài đặt nâng cao (Lobby / Xác thực)</span>
+                  <span class="transition-transform duration-250 group-open:rotate-180 text-zinc-400">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                  </span>
+                </summary>
+                
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">
+                  <!-- Auth Type -->
+                  <div>
+                    <label class="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1.5">Xác thực (Auth)</label>
+                    <select id="auth-type" 
+                            class="w-full bg-zinc-900 border border-zinc-850 rounded px-3 py-2 text-xs text-zinc-200 focus:outline-none focus-purple-glow transition h-[34px]">
+                      <option value="offline" selected>Offline (Cracked)</option>
+                      <option value="microsoft">Microsoft (Premium)</option>
+                    </select>
+                  </div>
+
+                  <!-- Lobby Item Keyword -->
+                  <div>
+                    <label class="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1.5">Vật phẩm Chọn Cụm</label>
+                    <input type="text" id="lobby-item" placeholder="Mặc định: chọn cụm, star" 
+                           class="w-full bg-zinc-900 border border-zinc-850 rounded px-3 py-2 text-xs text-zinc-200 focus:outline-none focus-purple-glow transition font-mono h-[34px]">
+                  </div>
+
+                  <!-- Lobby Server Keyword -->
+                  <div>
+                    <label class="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1.5">Từ khóa Tên Cụm</label>
+                    <input type="text" id="lobby-server" placeholder="Mặc định: survival, sinh tồn" 
+                           class="w-full bg-zinc-900 border border-zinc-850 rounded px-3 py-2 text-xs text-zinc-200 focus:outline-none focus-purple-glow transition font-mono h-[34px]">
+                  </div>
+                </div>
+              </details>
+            </div>
+
             <!-- Hidden components to maintain JS mapping -->
             <div class="hidden">
-              <select id="auth-type">
-                <option value="offline" selected>Offline</option>
-                <option value="microsoft">Microsoft</option>
-              </select>
               <input type="checkbox" id="auto-reconnect" checked>
             </div>
           </form>
