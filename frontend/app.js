@@ -17,6 +17,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const botPasswordInput = document.getElementById('bot-password');
   const lobbyItemInput = document.getElementById('lobby-item');
   const lobbyServerInput = document.getElementById('lobby-server');
+  const lobbyServerPresetSelect = document.getElementById('lobby-server-preset');
 
   const btnConnectBot = document.getElementById('btn-connect-bot');
   const btnDisconnectBot = document.getElementById('btn-disconnect-bot');
@@ -123,6 +124,32 @@ document.addEventListener('DOMContentLoaded', () => {
   if (botPasswordInput) botPasswordInput.value = localStorage.getItem('mc_bot_password') || '';
   minecraftVersionSelect.value = localStorage.getItem('mc_bot_version') || 'auto';
   if (lobbyItemInput) lobbyItemInput.value = localStorage.getItem('mc_bot_lobby_item') || '';
+  
+  if (lobbyServerPresetSelect) {
+    const savedPreset = localStorage.getItem('mc_bot_lobby_server_preset') || 'auto';
+    lobbyServerPresetSelect.value = savedPreset;
+    
+    // Đồng bộ hiển thị ô nhập tự chọn
+    if (savedPreset === 'custom') {
+      if (lobbyServerInput) lobbyServerInput.classList.remove('hidden');
+    } else {
+      if (lobbyServerInput) lobbyServerInput.classList.add('hidden');
+    }
+
+    // Lắng nghe thay đổi của dropdown chọn cụm
+    lobbyServerPresetSelect.addEventListener('change', (e) => {
+      if (e.target.value === 'custom') {
+        if (lobbyServerInput) {
+          lobbyServerInput.classList.remove('hidden');
+          lobbyServerInput.focus();
+        }
+      } else {
+        if (lobbyServerInput) lobbyServerInput.classList.add('hidden');
+      }
+      localStorage.setItem('mc_bot_lobby_server_preset', e.target.value);
+    });
+  }
+
   if (lobbyServerInput) lobbyServerInput.value = localStorage.getItem('mc_bot_lobby_server') || '';
   
   const authTypeSelect = document.getElementById('auth-type');
@@ -307,7 +334,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const auth = authTypeSelect ? authTypeSelect.value : 'offline';
     const autoReconnect = autoReconnectCheckbox ? autoReconnectCheckbox.checked : true;
     const lobbyItem = lobbyItemInput ? lobbyItemInput.value.trim() : '';
-    const lobbyServer = lobbyServerInput ? lobbyServerInput.value.trim() : '';
+    
+    const preset = lobbyServerPresetSelect ? lobbyServerPresetSelect.value : 'auto';
+    let lobbyServer = '';
+    if (preset === 'custom') {
+      lobbyServer = lobbyServerInput ? lobbyServerInput.value.trim() : '';
+    } else if (preset !== 'auto') {
+      lobbyServer = preset;
+    }
 
     if (!host || !username) {
       alert('Vui lòng điền đầy đủ IP Server và Tên Bot!');
@@ -324,6 +358,7 @@ document.addEventListener('DOMContentLoaded', () => {
     localStorage.setItem('mc_bot_auto_reconnect', autoReconnect);
     localStorage.setItem('mc_bot_lobby_item', lobbyItem);
     localStorage.setItem('mc_bot_lobby_server', lobbyServer);
+    localStorage.setItem('mc_bot_lobby_server_preset', preset);
 
     // Gửi sự kiện `start-bot` kèm đầy đủ cấu hình nâng cao
     socket.emit('start-bot', { host, port, username, password, version, auth, autoReconnect, lobbyItem, lobbyServer });

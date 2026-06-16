@@ -238,9 +238,17 @@
 
                   <!-- Lobby Server Keyword -->
                   <div>
-                    <label class="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1.5">Từ khóa Tên Cụm</label>
-                    <input type="text" id="lobby-server" placeholder="Mặc định: survival, sinh tồn" 
-                           class="w-full bg-zinc-900 border border-zinc-850 rounded px-3 py-2 text-xs text-zinc-200 focus:outline-none focus-purple-glow transition font-mono h-[34px]">
+                    <label class="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1.5">Cụm Máy Chủ</label>
+                    <select id="lobby-server-preset" 
+                            class="w-full bg-zinc-900 border border-zinc-850 rounded px-3 py-2 text-xs text-zinc-200 focus:outline-none focus-purple-glow transition h-[34px] mb-2">
+                      <option value="auto" selected>Mặc định (Survival/Sinh tồn)</option>
+                      <option value="skyblock">Skyblock (Đảo bay)</option>
+                      <option value="factions">Factions / Anarchy (Quân đoàn/Vô chính phủ)</option>
+                      <option value="bedwars">Bedwars / Minigames</option>
+                      <option value="custom">Tự nhập từ khóa khác...</option>
+                    </select>
+                    <input type="text" id="lobby-server" placeholder="Nhập từ khóa (vd: survival 2, skyblock)" 
+                           class="hidden w-full bg-zinc-900 border border-zinc-850 rounded px-3 py-2 text-xs text-zinc-200 focus:outline-none focus-purple-glow transition font-mono h-[34px]">
                   </div>
                 </div>
               </details>
