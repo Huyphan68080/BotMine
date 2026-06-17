@@ -548,10 +548,54 @@
             <div class="grid grid-cols-2 gap-3 font-mono text-[11px]">
               <span class="flex items-center gap-2"><span class="w-3 h-3 bg-zinc-950 border border-zinc-800 inline-block"></span> Khí / Trống</span>
               <span class="flex items-center gap-2"><span class="w-3 h-3 bg-green-800 inline-block"></span> Cỏ / Lá</span>
-              <span class="flex items-center gap-2"><span class="w-3 h-3 bg-slate-700 inline-block"></span> Đá / Quặng</span>
+              <span class="flex items-center gap-2"><span class="w-3 h-3 bg-slate-700 inline-block"></span> Đá / Đất sét</span>
               <span class="flex items-center gap-2"><span class="w-3 h-3 bg-blue-800 inline-block"></span> Nước</span>
               <span class="flex items-center gap-2"><span class="w-3 h-3 bg-red-800 inline-block"></span> Dung nham</span>
               <span class="flex items-center gap-2"><span class="w-3 h-3 bg-amber-900 inline-block"></span> Gỗ</span>
+            </div>
+
+            <h3 class="text-zinc-400 font-bold uppercase tracking-wider border-b border-zinc-900 pb-2 pt-2">Khoáng sản phát hiện (Bán kính 16m)</h3>
+            <div id="radar-ore-list" class="grid grid-cols-2 gap-2.5 font-mono text-[10.5px]">
+              <div id="ore-card-coal_ore" class="flex items-center justify-between bg-zinc-900/40 px-2.5 py-1.5 rounded border border-zinc-850 transition animate-fade">
+                <span class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded bg-zinc-650 inline-block"></span> Than (Coal):</span>
+                <span id="count-coal_ore" class="font-bold text-zinc-300">0</span>
+              </div>
+              <div id="ore-card-iron_ore" class="flex items-center justify-between bg-zinc-900/40 px-2.5 py-1.5 rounded border border-zinc-850 transition animate-fade">
+                <span class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded bg-yellow-600/90 inline-block"></span> Sắt (Iron):</span>
+                <span id="count-iron_ore" class="font-bold text-zinc-300">0</span>
+              </div>
+              <div id="ore-card-copper_ore" class="flex items-center justify-between bg-zinc-900/40 px-2.5 py-1.5 rounded border border-zinc-850 transition animate-fade">
+                <span class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded bg-orange-600 inline-block"></span> Đồng (Copper):</span>
+                <span id="count-copper_ore" class="font-bold text-zinc-300">0</span>
+              </div>
+              <div id="ore-card-gold_ore" class="flex items-center justify-between bg-zinc-900/40 px-2.5 py-1.5 rounded border border-zinc-850 transition animate-fade">
+                <span class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded bg-yellow-450 inline-block"></span> Vàng (Gold):</span>
+                <span id="count-gold_ore" class="font-bold text-zinc-300">0</span>
+              </div>
+              <div id="ore-card-redstone_ore" class="flex items-center justify-between bg-zinc-900/40 px-2.5 py-1.5 rounded border border-zinc-850 transition animate-fade">
+                <span class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded bg-red-650 inline-block"></span> Đá đỏ (Redstone):</span>
+                <span id="count-redstone_ore" class="font-bold text-zinc-300">0</span>
+              </div>
+              <div id="ore-card-lapis_ore" class="flex items-center justify-between bg-zinc-900/40 px-2.5 py-1.5 rounded border border-zinc-850 transition animate-fade">
+                <span class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded bg-blue-600 inline-block"></span> Lapis Lazuli:</span>
+                <span id="count-lapis_ore" class="font-bold text-zinc-300">0</span>
+              </div>
+              <div id="ore-card-diamond_ore" class="flex items-center justify-between bg-zinc-900/40 px-2.5 py-1.5 rounded border border-zinc-850 transition animate-fade">
+                <span class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded bg-cyan-400 inline-block"></span> Kim cương (Diamond):</span>
+                <span id="count-diamond_ore" class="font-bold text-zinc-300">0</span>
+              </div>
+              <div id="ore-card-emerald_ore" class="flex items-center justify-between bg-zinc-900/40 px-2.5 py-1.5 rounded border border-zinc-850 transition animate-fade">
+                <span class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded bg-emerald-500 inline-block"></span> Lục bảo (Emerald):</span>
+                <span id="count-emerald_ore" class="font-bold text-zinc-300">0</span>
+              </div>
+              <div id="ore-card-quartz_ore" class="flex items-center justify-between bg-zinc-900/40 px-2.5 py-1.5 rounded border border-zinc-850 transition animate-fade">
+                <span class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded bg-zinc-100 inline-block"></span> Thạch anh (Quartz):</span>
+                <span id="count-quartz_ore" class="font-bold text-zinc-300">0</span>
+              </div>
+              <div id="ore-card-ancient_debris" class="flex items-center justify-between bg-zinc-900/40 px-2.5 py-1.5 rounded border border-zinc-850 transition animate-fade">
+                <span class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded bg-amber-900 inline-block"></span> Mảnh cổ vật:</span>
+                <span id="count-ancient_debris" class="font-bold text-zinc-300">0</span>
+              </div>
             </div>
           </div>
         </div>

@@ -614,7 +614,7 @@ document.addEventListener('DOMContentLoaded', () => {
         minimapOverlay.classList.add('hidden');
       }
       
-      const { yaw, blocks, entities } = data;
+      const { yaw, blocks, entities, range = 8, oreCounts } = data;
       const width = minimapCanvas.width;
       const height = minimapCanvas.height;
       
@@ -622,28 +622,67 @@ document.addEventListener('DOMContentLoaded', () => {
       minimapCtx.fillStyle = '#020617'; // slate-950
       minimapCtx.fillRect(0, 0, width, height);
       
-      // Lưới block có kích thước 17x17
-      const gridSize = 17;
+      // Lưới block có kích thước động dựa trên range
+      const gridSize = range * 2 + 1;
       const tileSize = width / gridSize;
       
       // Màu sắc tương ứng với blockType
       const colors = {
         0: '#020617', // Air/Void: Slate-950
         1: '#166534', // Grass/Leaves: Green-800
-        2: '#334155', // Stone/Ores: Slate-700
+        2: '#334155', // Stone/Clay: Slate-700
         3: '#1e40af', // Water: Blue-800
         4: '#991b1b', // Lava: Red-800
         5: '#78350f', // Wood: Amber-900
-        6: '#475569'  // Other solid: Slate-600
+        6: '#475569', // Other solid: Slate-600
+        10: '#475569', // Coal Ore
+        11: '#d97706', // Iron Ore
+        12: '#ea580c', // Copper Ore
+        13: '#eab308', // Gold Ore
+        14: '#ef4444', // Redstone Ore
+        15: '#2563eb', // Lapis Ore
+        16: '#06b6d4', // Diamond Ore
+        17: '#10b981', // Emerald Ore
+        18: '#f1f5f9', // Quartz Ore
+        19: '#7c2d12'  // Ancient Debris
       };
+      
+      // Lấy loại quặng mục tiêu đang được chọn
+      const miningTargetSelect = document.getElementById('mining-target-ore');
+      const currentTarget = miningTargetSelect ? miningTargetSelect.value : 'all';
+      const targetMap = {
+        'coal_ore': 10,
+        'iron_ore': 11,
+        'copper_ore': 12,
+        'gold_ore': 13,
+        'redstone_ore': 14,
+        'lapis_ore': 15,
+        'diamond_ore': 16,
+        'emerald_ore': 17,
+        'quartz_ore': 18,
+        'ancient_debris': 19
+      };
+      const targetBlockType = targetMap[currentTarget];
       
       // Vẽ blocks
       if (blocks && blocks.length === gridSize * gridSize) {
         for (let r = 0; r < gridSize; r++) {
           for (let c = 0; c < gridSize; c++) {
             const blockType = blocks[r * gridSize + c];
-            minimapCtx.fillStyle = colors[blockType] || colors[0];
-            minimapCtx.fillRect(c * tileSize, r * tileSize, tileSize - 0.5, tileSize - 0.5);
+            
+            if (blockType === targetBlockType && targetBlockType !== undefined) {
+              // Hiệu ứng nhấp nháy phát sáng cho quặng mục tiêu
+              const pulse = Math.abs(Math.sin(Date.now() / 200));
+              minimapCtx.fillStyle = colors[blockType];
+              minimapCtx.fillRect(c * tileSize, r * tileSize, tileSize - 0.5, tileSize - 0.5);
+              
+              minimapCtx.strokeStyle = `rgba(255, 255, 255, ${0.4 + 0.6 * pulse})`;
+              minimapCtx.lineWidth = 1.5;
+              minimapCtx.strokeRect(c * tileSize + 0.5, r * tileSize + 0.5, tileSize - 1.5, tileSize - 1.5);
+            } else {
+              minimapCtx.fillStyle = colors[blockType] || colors[0];
+              minimapCtx.fillRect(c * tileSize, r * tileSize, tileSize - 0.5, tileSize - 0.5);
+            }
           }
         }
       }
@@ -654,15 +693,48 @@ document.addEventListener('DOMContentLoaded', () => {
       
       const centerX = width / 2;
       const centerY = height / 2;
-      minimapCtx.beginPath();
-      minimapCtx.arc(centerX, centerY, width / 4, 0, 2 * Math.PI);
-      minimapCtx.stroke();
-      minimapCtx.beginPath();
-      minimapCtx.arc(centerX, centerY, width / 2 - 5, 0, 2 * Math.PI);
-      minimapCtx.stroke();
+      const circleRadii = [width / 4, width / 2 - 5];
+      if (range === 16) {
+        circleRadii.push(width * 0.125);
+        circleRadii.push(width * 0.375);
+      }
+      circleRadii.forEach(radius => {
+        minimapCtx.beginPath();
+        minimapCtx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
+        minimapCtx.stroke();
+      });
+      
+      // Cập nhật số lượng quặng thực tế xung quanh bot trên giao diện
+      if (oreCounts) {
+        const oreTypes = ['coal_ore', 'iron_ore', 'copper_ore', 'gold_ore', 'redstone_ore', 'lapis_ore', 'diamond_ore', 'emerald_ore', 'quartz_ore', 'ancient_debris'];
+        
+        oreTypes.forEach(t => {
+          const countSpan = document.getElementById(`count-${t}`);
+          const cardDiv = document.getElementById(`ore-card-${t}`);
+          
+          if (countSpan) {
+            const count = oreCounts[t] || 0;
+            countSpan.textContent = count;
+            if (count > 0) {
+              countSpan.className = 'font-bold text-purpleAccent scale-105 transition duration-300';
+            } else {
+              countSpan.className = 'font-bold text-zinc-500';
+            }
+          }
+          
+          if (cardDiv) {
+            // Highlight card nếu là quặng đang được chọn làm mục tiêu đào
+            if (t === currentTarget) {
+              cardDiv.className = 'flex items-center justify-between bg-purpleAccent/10 px-2.5 py-1.5 rounded border border-purpleAccent/45 shadow-inner shadow-purpleAccent/5 transition duration-300 scale-[1.02]';
+            } else {
+              cardDiv.className = 'flex items-center justify-between bg-zinc-900/40 px-2.5 py-1.5 rounded border border-zinc-850 transition duration-300';
+            }
+          }
+        });
+      }
       
       // Vẽ các thực thể (Entities)
-      const maxRange = 8.5; // Kích thước bán kính lưới block
+      const maxRange = range + 0.5; // Kích thước bán kính lưới block
       
       if (entities && Array.isArray(entities)) {
         entities.forEach(entity => {
@@ -690,7 +762,7 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // Viết nhãn tên thực thể nhỏ phía trên chấm tròn nếu ở gần bot
             const dist = Math.sqrt(relX * relX + relZ * relZ);
-            if (dist < 6) {
+            if (dist < (range * 0.75)) {
                minimapCtx.fillStyle = 'rgba(255, 255, 255, 0.7)';
                minimapCtx.font = '8px sans-serif';
                minimapCtx.textBaseline = 'bottom';

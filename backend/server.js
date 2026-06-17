@@ -779,9 +779,33 @@ function startSurvivalLoop(bot, socket) {
         return;
       }
 
-      // Bước 3.6: Nếu đã có kiếm đá/cúp đá, đi tìm quặng sắt hoặc quặng than gần đó để đào làm tài nguyên
-      if (inv.hasStonePickaxe) {
+      // Bước 3.6: Nếu đã có cúp, đi tìm quặng gần đó trong bán kính 16 block để đào làm tài nguyên
+      if (inv.hasPickaxe) {
         const targetOre = bot.miningTargetOre || 'all';
+        const oreNamesVi = {
+          'all': 'tất cả quặng',
+          'coal_ore': 'quặng than',
+          'iron_ore': 'quặng sắt',
+          'copper_ore': 'quặng đồng',
+          'gold_ore': 'quặng vàng',
+          'redstone_ore': 'quặng đá đỏ',
+          'lapis_ore': 'quặng lapis lazuli',
+          'emerald_ore': 'quặng ngọc lục bảo',
+          'quartz_ore': 'quặng thạch anh',
+          'ancient_debris': 'mảnh cổ vật'
+        };
+
+        // Tin nhắn quét định kỳ (mỗi 15 giây gửi 1 lần để tránh spam)
+        const now = Date.now();
+        if (!bot.lastScanTime || now - bot.lastScanTime > 15000) {
+          bot.lastScanTime = now;
+          socket.emit('bot-chat', {
+            sender: 'System',
+            message: `🔍 AI Sinh Tồn: Đang quét địa hình bán kính 16 block tìm ${oreNamesVi[targetOre] || targetOre}...`,
+            time: new Date().toLocaleTimeString('vi-VN', { hour12: false })
+          });
+        }
+
         const oreBlock = bot.findBlock({
           matching: block => {
             if (!block || !block.name) return false;
@@ -801,23 +825,30 @@ function startSurvivalLoop(bot, socket) {
             if (!matchesTarget) return false;
             
             // Kiểm tra loại cúp tối thiểu để tránh đào mất (không rơi ra quặng)
-            // Vàng, Kim Cương, Đá đỏ, Ngọc lục bảo, Ancient Debris cần cúp Sắt trở lên
+            // 1. Vàng, Kim Cương, Đá đỏ, Ngọc lục bảo, Ancient Debris cần cúp Sắt trở lên
             const requiresIronPick = name.includes('gold_ore') || name.includes('redstone_ore') || 
                                      name.includes('diamond_ore') || name.includes('emerald_ore') ||
                                      name.includes('ancient_debris');
             if (requiresIronPick && !inv.hasIronPickaxe) {
               return false;
             }
+
+            // 2. Sắt, Lapis cần cúp Đá trở lên
+            const requiresStonePick = name.includes('iron_ore') || name.includes('lapis_ore');
+            if (requiresStonePick && !inv.hasStonePickaxe) {
+              return false;
+            }
             
             return true;
           },
-          maxDistance: 32
+          maxDistance: 16
         });
 
         if (oreBlock) {
+          const oreDisplayName = oreNamesVi[targetOre] || oreBlock.name;
           socket.emit('bot-chat', {
             sender: 'System',
-            message: `⛏️ AI Sinh Tồn: Phát hiện quặng ${oreBlock.name}! Tiến tới khai thác...`,
+            message: `⛏️ AI Sinh Tồn: Đã tìm thấy ${oreDisplayName} tại (${Math.round(oreBlock.position.x)}, ${Math.round(oreBlock.position.y)}, ${Math.round(oreBlock.position.z)})! Tiến tới khai thác...`,
             time: new Date().toLocaleTimeString('vi-VN', { hour12: false })
           });
           try {
@@ -2035,39 +2066,111 @@ io.on('connection', (socket) => {
         try {
           const botPos = bot.entity.position;
           
-          // 1. Quét blocks xung quanh (lưới 17x17)
+          // 1. Quét blocks xung quanh (lưới 33x33 - bán kính 16 block)
           const blocks = [];
-          const range = 8; // -8 đến +8 là 17 ô
+          const range = 16; // bán kính 16 ô
           
           for (let dz = -range; dz <= range; dz++) {
             for (let dx = -range; dx <= range; dx++) {
               let blockType = 0; // 0: air/void
               
-              // Quét từ Y - 1 (dưới chân) xuống Y - 5 để tìm block sàn
-              for (let dy = -1; dy >= -5; dy--) {
+              // 1.1 Tìm quặng trước trong toàn bộ cột Y+2 đến Y-10 để ưu tiên hiển thị quặng
+              let foundOreType = 0;
+              for (let dy = 2; dy >= -10; dy--) {
                 const pos = botPos.offset(dx, dy, dz);
                 const block = bot.blockAt(pos);
-                
-                if (block && block.name && block.name !== 'air') {
+                if (block && block.name) {
                   const bName = block.name.toLowerCase();
-                  if (bName.includes('grass') || bName.includes('leaves') || bName.includes('dandelion') || bName.includes('poppy') || bName.includes('fern') || bName.includes('sapling')) {
-                    blockType = 1; // 1: cỏ/lá
-                  } else if (bName.includes('stone') || bName.includes('cobble') || bName.includes('coal') || bName.includes('iron') || bName.includes('gold') || bName.includes('diamond') || bName.includes('redstone') || bName.includes('copper') || bName.includes('lapis') || bName.includes('emerald') || bName.includes('deepslate') || bName.includes('andesite') || bName.includes('diorite') || bName.includes('granite') || bName.includes('brick') || bName.includes('obsidian')) {
-                    blockType = 2; // 2: đá/quặng/gạch
-                  } else if (bName.includes('water')) {
-                    blockType = 3; // 3: nước
-                  } else if (bName.includes('lava')) {
-                    blockType = 4; // 4: dung nham
-                  } else if (bName.includes('wood') || bName.includes('log') || bName.includes('plank') || bName.includes('fence') || bName.includes('door') || bName.includes('chest')) {
-                    blockType = 5; // 5: gỗ
-                  } else {
-                    blockType = 6; // 6: khối rắn khác
+                  if (bName.includes('coal_ore')) { foundOreType = 10; break; }
+                  else if (bName.includes('iron_ore')) { foundOreType = 11; break; }
+                  else if (bName.includes('copper_ore')) { foundOreType = 12; break; }
+                  else if (bName.includes('gold_ore')) { foundOreType = 13; break; }
+                  else if (bName.includes('redstone_ore')) { foundOreType = 14; break; }
+                  else if (bName.includes('lapis_ore')) { foundOreType = 15; break; }
+                  else if (bName.includes('diamond_ore')) { foundOreType = 16; break; }
+                  else if (bName.includes('emerald_ore')) { foundOreType = 17; break; }
+                  else if (bName.includes('quartz_ore')) { foundOreType = 18; break; }
+                  else if (bName.includes('ancient_debris')) { foundOreType = 19; break; }
+                }
+              }
+
+              if (foundOreType > 0) {
+                blockType = foundOreType;
+              } else {
+                // 1.2 Nếu không tìm thấy quặng, quét tìm block sàn thông thường
+                for (let dy = 2; dy >= -10; dy--) {
+                  const pos = botPos.offset(dx, dy, dz);
+                  const block = bot.blockAt(pos);
+                  
+                  if (block && block.name && block.name !== 'air') {
+                    const bName = block.name.toLowerCase();
+                    if (bName.includes('grass') || bName.includes('leaves') || bName.includes('dandelion') || bName.includes('poppy') || bName.includes('fern') || bName.includes('sapling')) {
+                      blockType = 1; // 1: cỏ/lá
+                    } else if (bName.includes('water')) {
+                      blockType = 3; // 3: nước
+                    } else if (bName.includes('lava')) {
+                      blockType = 4; // 4: dung nham
+                    } else if (bName.includes('wood') || bName.includes('log') || bName.includes('plank') || bName.includes('fence') || bName.includes('door') || bName.includes('chest')) {
+                      blockType = 5; // 5: gỗ
+                    } else if (bName.includes('stone') || bName.includes('cobble') || bName.includes('deepslate') || bName.includes('andesite') || bName.includes('diorite') || bName.includes('granite') || bName.includes('brick') || bName.includes('obsidian') || bName.includes('tuff')) {
+                      blockType = 2; // 2: đá/gạch
+                    } else {
+                      blockType = 6; // 6: khối rắn khác
+                    }
+                    break; // Tìm thấy sàn, chuyển sang ô tiếp theo
                   }
-                  break; // Tìm thấy sàn, chuyển sang ô tiếp theo
                 }
               }
               blocks.push(blockType);
             }
+          }
+          
+          // Thống kê số lượng quặng thực tế trong bán kính 16 block xung quanh bot
+          const oreCounts = {
+            coal_ore: 0,
+            iron_ore: 0,
+            copper_ore: 0,
+            gold_ore: 0,
+            redstone_ore: 0,
+            lapis_ore: 0,
+            diamond_ore: 0,
+            emerald_ore: 0,
+            quartz_ore: 0,
+            ancient_debris: 0
+          };
+          
+          try {
+            const registry = bot.registry || (bot.version ? require('minecraft-data')(bot.version) : require('minecraft-data')('1.21.1'));
+            if (registry) {
+              const oreIds = Object.values(registry.blocksByName)
+                .filter(b => b.name && (b.name.includes('ore') || b.name === 'ancient_debris'))
+                .map(b => b.id);
+                
+              const foundOres = bot.findBlocks({
+                matching: oreIds,
+                maxDistance: 16,
+                count: 300
+              });
+              
+              foundOres.forEach(pos => {
+                const block = bot.blockAt(pos);
+                if (block && block.name) {
+                  const bName = block.name.toLowerCase();
+                  if (bName.includes('coal_ore')) oreCounts.coal_ore++;
+                  else if (bName.includes('iron_ore')) oreCounts.iron_ore++;
+                  else if (bName.includes('copper_ore')) oreCounts.copper_ore++;
+                  else if (bName.includes('gold_ore')) oreCounts.gold_ore++;
+                  else if (bName.includes('redstone_ore')) oreCounts.redstone_ore++;
+                  else if (bName.includes('lapis_ore')) oreCounts.lapis_ore++;
+                  else if (bName.includes('diamond_ore')) oreCounts.diamond_ore++;
+                  else if (bName.includes('emerald_ore')) oreCounts.emerald_ore++;
+                  else if (bName.includes('quartz_ore')) oreCounts.quartz_ore++;
+                  else if (bName.includes('ancient_debris')) oreCounts.ancient_debris++;
+                }
+              });
+            }
+          } catch (err) {
+            console.error('[Bot Radar] Lỗi đếm quặng:', err.message);
           }
           
           // 2. Quét thực thể xung quanh (mobs/players)
@@ -2104,8 +2207,10 @@ io.on('connection', (socket) => {
           // Gửi gói dữ liệu radar lên frontend
           socket.emit('bot-radar', {
             yaw: bot.entity.yaw,
+            range: range,
             blocks: blocks,
-            entities: entities
+            entities: entities,
+            oreCounts: oreCounts
           });
           
         } catch (err) {
