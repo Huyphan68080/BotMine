@@ -534,7 +534,18 @@ function startSurvivalLoop(bot, socket) {
   bot.survivalInterval = setInterval(async () => {
     if (!bot.entity) return;
     if (bot.isSleeping) return;
-    if (bot.isSurvivalBusy) return;
+
+    const now = Date.now();
+    if (bot.isSurvivalBusy) {
+      // Watchdog: Nếu bận quá 30 giây (do đào khối bảo vệ hoặc kẹt pathfinder), giải phóng bận để bot hoạt động tiếp
+      if (bot.lastSurvivalTickTime && now - bot.lastSurvivalTickTime > 30000) {
+        console.warn('[AI Survival] Watchdog: Phát hiện kẹt bận quá 30 giây! Tự động giải phóng...');
+        bot.isSurvivalBusy = false;
+      } else {
+        return;
+      }
+    }
+    bot.lastSurvivalTickTime = now;
 
     bot.isSurvivalBusy = true;
     bot.failedBlocks = bot.failedBlocks || [];
