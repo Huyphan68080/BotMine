@@ -261,6 +261,26 @@ async function eatOffhand(bot) {
   }
 }
 
+// Kiểm tra xem block có tiếp giáp với không khí hoặc chất lỏng không (chỉ đào/quét quặng lộ thiên để bypass Anti-Xray/Anti-Freecam)
+function isBlockExposed(bot, block) {
+  if (!block || !block.position) return false;
+  const { Vec3 } = require('vec3');
+  const offsets = [
+    new Vec3(1, 0, 0),
+    new Vec3(-1, 0, 0),
+    new Vec3(0, 1, 0),
+    new Vec3(0, -1, 0),
+    new Vec3(0, 0, 1),
+    new Vec3(0, 0, -1)
+  ];
+  return offsets.some(offset => {
+    const adj = bot.blockAt(block.position.plus(offset));
+    if (!adj) return false;
+    const name = adj.name.toLowerCase();
+    return name === 'air' || name === 'cave_air' || name === 'void_air' || name.includes('water') || name.includes('lava');
+  });
+}
+
 // Phân tích kho đồ để phục vụ AI Sinh tồn
 function checkInventoryForSurvival(bot) {
   const items = bot.inventory.items();
@@ -372,7 +392,7 @@ async function chopTree(bot, startLogBlock) {
     await bot.pathfinder.goto(new goals.GoalLookAtBlock(startLogBlock.position, bot.world));
   } catch (e) {
     console.warn('[Chop Tree] Không thể di chuyển tới gốc cây:', e.message);
-    return;
+    return false;
   }
 
   const startY = Math.floor(bot.entity.position.y);
@@ -458,6 +478,7 @@ async function chopTree(bot, startLogBlock) {
     }
     currentY = Math.floor(bot.entity.position.y);
   }
+  return true;
 }
 
 // Chế độ tự sinh tồn AI (AI Survival Loop v2)
@@ -504,6 +525,10 @@ function startSurvivalLoop(bot, socket) {
     if (bot.isSurvivalBusy) return;
 
     bot.isSurvivalBusy = true;
+    bot.failedBlocks = bot.failedBlocks || [];
+    if (bot.failedBlocks.length > 50) {
+      bot.failedBlocks.shift();
+    }
     try {
       const { goals } = require('mineflayer-pathfinder');
       const mcData = require('minecraft-data')(bot.version);
@@ -584,7 +609,6 @@ function startSurvivalLoop(bot, socket) {
       const inv = checkInventoryForSurvival(bot);
 
       // 3. Quy trình chế tạo công cụ & cày cuốc
-      // 3. Quy trình chế tạo công cụ & cày cuốc
       // Tính toán lượng ván gỗ ảo (virtual planks) và lượng cần thiết
       const virtualPlanks = inv.totalPlanks + (inv.totalLogs * 4);
       let planksNeeded = 0;
@@ -608,15 +632,20 @@ function startSurvivalLoop(bot, socket) {
         });
 
         const logBlock = bot.findBlock({
-          matching: block => block && block.name.includes('_log'),
+          matching: block => {
+            if (!block || !block.name || !block.name.includes('_log')) return false;
+            // Bỏ qua nếu block gỗ nằm trong danh sách đen tọa độ lỗi
+            if (bot.failedBlocks && bot.failedBlocks.some(pos => pos.equals(block.position))) return false;
+            return true;
+          },
           maxDistance: 32
         });
 
         if (logBlock) {
-          try {
-            await chopTree(bot, logBlock);
-          } catch (e) {
-            console.warn('[AI Survival] Lỗi chặt cây:', e.message);
+          const success = await chopTree(bot, logBlock);
+          if (!success) {
+            console.warn('[AI Survival] Lỗi chặt cây, thêm vào blacklist:', logBlock.position);
+            bot.failedBlocks.push(logBlock.position.clone());
           }
         } else {
           socket.emit('bot-chat', {
@@ -735,20 +764,33 @@ function startSurvivalLoop(bot, socket) {
         });
 
         const stoneBlock = bot.findBlock({
-          matching: block => block && (block.name === 'stone' || block.name === 'cobblestone' || block.name === 'deepslate' || block.name === 'andesite' || block.name === 'diorite' || block.name === 'granite'),
+          matching: block => {
+            if (!block) return false;
+            // Bỏ qua nếu block đá nằm trong danh sách đen tọa độ lỗi
+            if (bot.failedBlocks && bot.failedBlocks.some(pos => pos.equals(block.position))) return false;
+            
+            const isStone = block.name === 'stone' || block.name === 'cobblestone' || block.name === 'deepslate' || 
+                            block.name === 'andesite' || block.name === 'diorite' || block.name === 'granite';
+            if (!isStone) return false;
+
+            // Đá cũng cần lộ thiên để đảm bảo di chuyển an toàn và tự nhiên
+            return isBlockExposed(bot, block);
+          },
           maxDistance: 32
         });
 
         if (stoneBlock) {
           try {
             await bot.pathfinder.goto(new goals.GoalLookAtBlock(stoneBlock.position, bot.world));
+            await bot.lookAt(stoneBlock.position.offset(0.5, 0.5, 0.5));
             const pick = bot.inventory.items().find(i => i.name.includes('_pickaxe'));
             if (pick) await bot.equip(pick, 'hand');
             await bot.dig(stoneBlock);
             await new Promise(resolve => setTimeout(resolve, 200));
             await collectNearbyItems(bot);
           } catch (e) {
-            console.warn('[AI Survival] Lỗi đào đá:', e.message);
+            console.warn('[AI Survival] Lỗi đào đá, thêm vào blacklist:', stoneBlock.position, e.message);
+            bot.failedBlocks.push(stoneBlock.position.clone());
           }
         } else {
           socket.emit('bot-chat', {
@@ -809,6 +851,9 @@ function startSurvivalLoop(bot, socket) {
         const oreBlock = bot.findBlock({
           matching: block => {
             if (!block || !block.name) return false;
+            // Bỏ qua nếu block quặng nằm trong danh sách đen tọa độ lỗi
+            if (bot.failedBlocks && bot.failedBlocks.some(pos => pos.equals(block.position))) return false;
+
             const name = block.name.toLowerCase();
             
             // Xác định xem block này có phải là quặng và khớp cấu hình người dùng hay không
@@ -823,6 +868,9 @@ function startSurvivalLoop(bot, socket) {
             }
             
             if (!matchesTarget) return false;
+
+            // Bổ sung kiểm tra lộ thiên: Chỉ đào quặng đã lộ ra không khí/nước/dung nham để tránh bị anti-cheat gắn cờ đào xuyên tường/freecam
+            if (!isBlockExposed(bot, block)) return false;
             
             // Kiểm tra loại cúp tối thiểu để tránh đào mất (không rơi ra quặng)
             // 1. Vàng, Kim Cương, Đá đỏ, Ngọc lục bảo, Ancient Debris cần cúp Sắt trở lên
@@ -853,13 +901,15 @@ function startSurvivalLoop(bot, socket) {
           });
           try {
             await bot.pathfinder.goto(new goals.GoalLookAtBlock(oreBlock.position, bot.world));
+            await bot.lookAt(oreBlock.position.offset(0.5, 0.5, 0.5));
             const pick = bot.inventory.items().find(i => i.name.includes('_pickaxe'));
             if (pick) await bot.equip(pick, 'hand');
             await bot.dig(oreBlock);
             await new Promise(resolve => setTimeout(resolve, 200));
             await collectNearbyItems(bot);
           } catch (e) {
-            console.warn('[AI Survival] Lỗi đào quặng:', e.message);
+            console.warn('[AI Survival] Lỗi đào quặng, thêm vào blacklist:', oreBlock.position, e.message);
+            bot.failedBlocks.push(oreBlock.position.clone());
           }
           return;
         }
@@ -2081,16 +2131,24 @@ io.on('connection', (socket) => {
                 const block = bot.blockAt(pos);
                 if (block && block.name) {
                   const bName = block.name.toLowerCase();
-                  if (bName.includes('coal_ore')) { foundOreType = 10; break; }
-                  else if (bName.includes('iron_ore')) { foundOreType = 11; break; }
-                  else if (bName.includes('copper_ore')) { foundOreType = 12; break; }
-                  else if (bName.includes('gold_ore')) { foundOreType = 13; break; }
-                  else if (bName.includes('redstone_ore')) { foundOreType = 14; break; }
-                  else if (bName.includes('lapis_ore')) { foundOreType = 15; break; }
-                  else if (bName.includes('diamond_ore')) { foundOreType = 16; break; }
-                  else if (bName.includes('emerald_ore')) { foundOreType = 17; break; }
-                  else if (bName.includes('quartz_ore')) { foundOreType = 18; break; }
-                  else if (bName.includes('ancient_debris')) { foundOreType = 19; break; }
+                  let isOre = false;
+                  let potentialType = 0;
+                  if (bName.includes('coal_ore')) { isOre = true; potentialType = 10; }
+                  else if (bName.includes('iron_ore')) { isOre = true; potentialType = 11; }
+                  else if (bName.includes('copper_ore')) { isOre = true; potentialType = 12; }
+                  else if (bName.includes('gold_ore')) { isOre = true; potentialType = 13; }
+                  else if (bName.includes('redstone_ore')) { isOre = true; potentialType = 14; }
+                  else if (bName.includes('lapis_ore')) { isOre = true; potentialType = 15; }
+                  else if (bName.includes('diamond_ore')) { isOre = true; potentialType = 16; }
+                  else if (bName.includes('emerald_ore')) { isOre = true; potentialType = 17; }
+                  else if (bName.includes('quartz_ore')) { isOre = true; potentialType = 18; }
+                  else if (bName.includes('ancient_debris')) { isOre = true; potentialType = 19; }
+                  
+                  // Chỉ hiển thị trên radar nếu quặng LỘ THIÊN để tránh fake ore của Anti-Xray làm nhiễu
+                  if (isOre && isBlockExposed(bot, block)) {
+                    foundOreType = potentialType;
+                    break;
+                  }
                 }
               }
 
@@ -2154,7 +2212,7 @@ io.on('connection', (socket) => {
               
               foundOres.forEach(pos => {
                 const block = bot.blockAt(pos);
-                if (block && block.name) {
+                if (block && block.name && isBlockExposed(bot, block)) {
                   const bName = block.name.toLowerCase();
                   if (bName.includes('coal_ore')) oreCounts.coal_ore++;
                   else if (bName.includes('iron_ore')) oreCounts.iron_ore++;
