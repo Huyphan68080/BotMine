@@ -360,8 +360,10 @@ document.addEventListener('DOMContentLoaded', () => {
     localStorage.setItem('mc_bot_lobby_server', lobbyServer);
     localStorage.setItem('mc_bot_lobby_server_preset', preset);
 
-    // Gửi sự kiện `start-bot` kèm đầy đủ cấu hình nâng cao
-    socket.emit('start-bot', { host, port, username, password, version, auth, autoReconnect, lobbyItem, lobbyServer });
+    // Gửi sự kiện `start-bot` kèm đầy đủ cấu hình nâng cao bao gồm cả loại quặng muốn đào
+    const miningTargetSelect = document.getElementById('mining-target-ore');
+    const miningTarget = miningTargetSelect ? miningTargetSelect.value : 'all';
+    socket.emit('start-bot', { host, port, username, password, version, auth, autoReconnect, lobbyItem, lobbyServer, miningTarget });
     appendChatLog('System', `Yêu cầu kết nối bot [${username}] tới ${host}:${port || '25565'} (Auth: ${auth})...`, 'system');
   });
 
@@ -813,6 +815,23 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       socket.emit('toggle_module', { module: 'ai_survival', state: e.target.checked });
     });
+  }
+
+  const miningTargetSelect = document.getElementById('mining-target-ore');
+  if (miningTargetSelect) {
+    // Khôi phục cấu hình từ localStorage
+    const savedMiningTarget = localStorage.getItem('mc_bot_mining_target') || 'all';
+    miningTargetSelect.value = savedMiningTarget;
+
+    const updateMiningTarget = () => {
+      const val = miningTargetSelect.value;
+      localStorage.setItem('mc_bot_mining_target', val);
+      if (socket && socket.connected && isBotOnline) {
+        socket.emit('set_survival_config', { key: 'mining_target', value: val });
+      }
+    };
+
+    miningTargetSelect.addEventListener('change', updateMiningTarget);
   }
 
   if (autoReconnectToggle) {

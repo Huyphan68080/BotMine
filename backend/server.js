@@ -284,6 +284,7 @@ function checkInventoryForSurvival(bot) {
   const totalStones = stones.reduce((sum, i) => sum + i.count, 0);
 
   const hasStonePickaxe = pickaxes.some(i => i.name === 'stone_pickaxe' || i.name === 'iron_pickaxe' || i.name === 'diamond_pickaxe');
+  const hasIronPickaxe = pickaxes.some(i => i.name === 'iron_pickaxe' || i.name === 'diamond_pickaxe');
   const hasWoodPickaxe = pickaxes.some(i => i.name === 'wooden_pickaxe');
   const hasPickaxe = pickaxes.length > 0;
   
@@ -299,6 +300,7 @@ function checkInventoryForSurvival(bot) {
     hasPickaxe,
     hasWoodPickaxe,
     hasStonePickaxe,
+    hasIronPickaxe,
     hasSword,
     hasStoneSword
   };
@@ -779,8 +781,36 @@ function startSurvivalLoop(bot, socket) {
 
       // Bước 3.6: Nếu đã có kiếm đá/cúp đá, đi tìm quặng sắt hoặc quặng than gần đó để đào làm tài nguyên
       if (inv.hasStonePickaxe) {
+        const targetOre = bot.miningTargetOre || 'all';
         const oreBlock = bot.findBlock({
-          matching: block => block && (block.name.includes('coal_ore') || block.name.includes('iron_ore') || block.name.includes('copper_ore')),
+          matching: block => {
+            if (!block || !block.name) return false;
+            const name = block.name.toLowerCase();
+            
+            // Xác định xem block này có phải là quặng và khớp cấu hình người dùng hay không
+            let matchesTarget = false;
+            if (targetOre === 'all') {
+              matchesTarget = name.includes('coal_ore') || name.includes('iron_ore') || name.includes('copper_ore') ||
+                              name.includes('gold_ore') || name.includes('redstone_ore') || name.includes('diamond_ore') ||
+                              name.includes('lapis_ore') || name.includes('emerald_ore') || name.includes('quartz_ore') ||
+                              name.includes('ancient_debris');
+            } else {
+              matchesTarget = name.includes(targetOre);
+            }
+            
+            if (!matchesTarget) return false;
+            
+            // Kiểm tra loại cúp tối thiểu để tránh đào mất (không rơi ra quặng)
+            // Vàng, Kim Cương, Đá đỏ, Ngọc lục bảo, Ancient Debris cần cúp Sắt trở lên
+            const requiresIronPick = name.includes('gold_ore') || name.includes('redstone_ore') || 
+                                     name.includes('diamond_ore') || name.includes('emerald_ore') ||
+                                     name.includes('ancient_debris');
+            if (requiresIronPick && !inv.hasIronPickaxe) {
+              return false;
+            }
+            
+            return true;
+          },
           maxDistance: 32
         });
 
@@ -1678,6 +1708,7 @@ io.on('connection', (socket) => {
     let bot;
     try {
       bot = mineflayer.createBot(botOptions);
+      bot.miningTargetOre = config.miningTarget || 'all'; // Lưu quặng ưu tiên đào từ cấu hình người dùng
       bot.entity = { id: -1 }; // Khởi tạo để tránh crash lỗi entity_status khi chưa login
       
       // Chặn và loại bỏ các thực thể Display và các thực thể dễ gây lỗi tương thích
@@ -3333,6 +3364,23 @@ io.on('connection', (socket) => {
       bot.look(newYaw, newPitch, true);
     } catch (err) {
       console.error('[Bot] Lỗi khi xoay hướng nhìn:', err.message);
+    }
+  });
+
+  // Lắng nghe cấu hình chế độ Sinh tồn tự động từ client
+  socket.on('set_survival_config', (data) => {
+    const { key, value } = data;
+    const bot = activeBots['default_bot'];
+    if (!bot) return;
+
+    if (key === 'mining_target') {
+      bot.miningTargetOre = value;
+      console.log(`[AI Survival] Cấu hình loại quặng ưu tiên đào: ${value}`);
+      socket.emit('bot-chat', {
+        sender: 'System',
+        message: `⛏️ Đã đổi mục tiêu khai thác thành: ${value === 'all' ? 'Tất cả quặng' : value}`,
+        time: new Date().toLocaleTimeString('vi-VN', { hour12: false })
+      });
     }
   });
 
