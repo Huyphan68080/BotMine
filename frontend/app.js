@@ -108,12 +108,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // Lấy URL lưu từ localStorage hoặc mặc định là server hiện tại hoặc localhost:3000
+  // Lấy URL lưu từ localStorage hoặc mặc định là server hiện tại phục vụ trang web
   let savedBackendUrl = localStorage.getItem('mc_bot_backend_url');
   if (!savedBackendUrl) {
-    savedBackendUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
-      ? 'http://localhost:3000' 
-      : 'https://minecraft-bot-backend.onrender.com';
+    savedBackendUrl = window.location.origin;
   }
   backendUrlInput.value = savedBackendUrl;
 

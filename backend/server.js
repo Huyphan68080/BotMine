@@ -1377,6 +1377,10 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 
+// Phục vụ các tệp tĩnh của thư mục frontend trực tiếp từ backend
+const path = require('path');
+app.use(express.static(path.join(__dirname, '../frontend')));
+
 // Endpoint /ping để giữ server luôn hoạt động (uptime check trên Render)
 app.get('/ping', (req, res) => {
   res.status(200).json({
