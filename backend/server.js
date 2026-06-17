@@ -277,7 +277,19 @@ function isBlockExposed(bot, block) {
     const adj = bot.blockAt(block.position.plus(offset));
     if (!adj) return false;
     const name = adj.name.toLowerCase();
-    return name === 'air' || name === 'cave_air' || name === 'void_air' || name.includes('water') || name.includes('lava');
+    
+    // Các khối không rắn thường tiếp giáp với quặng lộ thiên trong hang động (bao gồm đuốc, địa y phát sáng, cỏ, tuyết...)
+    const transparentKeywords = [
+      'air', 'water', 'lava', 'lichen', 'torch', 'grass', 'flower', 
+      'fern', 'dandelion', 'poppy', 'blue_orchid', 'allium', 'azure_bluet', 
+      'tulip', 'oxeye_daisy', 'cornflower', 'lily', 'wither_rose', 'sunflower', 
+      'lilac', 'rose_bush', 'peony', 'fire', 'snow', 'vine', 'rail', 'wire', 
+      'lever', 'button', 'pressure_plate', 'redstone', 'carpet', 'sapling',
+      'dripstone', 'spore_blossom', 'azalea', 'moss_carpet', 'moss_block',
+      'amethyst', 'sign', 'banner', 'portal', 'web', 'ladder', 'lantern'
+    ];
+    
+    return name === 'air' || name === 'cave_air' || name === 'void_air' || transparentKeywords.some(kw => name.includes(kw));
   });
 }
 
