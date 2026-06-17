@@ -287,9 +287,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const killauraToggle = document.getElementById('killaura-toggle');
         const autoeatToggle = document.getElementById('autoeat-toggle');
         const autoarmorToggle = document.getElementById('autoarmor-toggle');
+        const aisurvivalToggle = document.getElementById('aisurvival-toggle');
         if (killauraToggle) killauraToggle.checked = false;
         if (autoeatToggle) autoeatToggle.checked = false;
         if (autoarmorToggle) autoarmorToggle.checked = false;
+        if (aisurvivalToggle) aisurvivalToggle.checked = false;
 
         // Điều khiển nút & form
         btnConnectBot.disabled = false;
@@ -724,6 +726,25 @@ document.addEventListener('DOMContentLoaded', () => {
         minimapCtx.fill();
       }
     });
+
+    // Nhận cập nhật trạng thái bật/tắt module từ backend
+    socket.on('module_state_change', (data) => {
+      const { module, state } = data;
+      console.log(`[Socket] Cập nhật module: ${module} -> ${state}`);
+      if (module === 'killaura') {
+        const toggle = document.getElementById('killaura-toggle');
+        if (toggle) toggle.checked = state;
+      } else if (module === 'autoeat') {
+        const toggle = document.getElementById('autoeat-toggle');
+        if (toggle) toggle.checked = state;
+      } else if (module === 'autoarmor') {
+        const toggle = document.getElementById('autoarmor-toggle');
+        if (toggle) toggle.checked = state;
+      } else if (module === 'ai_survival') {
+        const toggle = document.getElementById('aisurvival-toggle');
+        if (toggle) toggle.checked = state;
+      }
+    });
   }
 
   // --- Lắng nghe các Module Hack phong cách Hack Client ---
@@ -732,6 +753,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const autoarmorToggle = document.getElementById('autoarmor-toggle');
   const autoReconnectToggle = document.getElementById('auto-reconnect-toggle');
   const killauraDualwieldToggle = document.getElementById('killaura-dualwield-toggle');
+  const aisurvivalToggle = document.getElementById('aisurvival-toggle');
 
   if (killauraDualwieldToggle) {
     // Khôi phục trạng thái từ localStorage
@@ -781,6 +803,17 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
       socket.emit('toggle_module', { module: 'autoarmor', state: e.target.checked });
+    });
+  }
+
+  if (aisurvivalToggle) {
+    aisurvivalToggle.addEventListener('change', (e) => {
+      if (!socket || !socket.connected || !isBotOnline) {
+        alert('Bot chưa kết nối! Vui lòng kết nối Bot trước khi bật AI Sinh tồn.');
+        e.target.checked = false;
+        return;
+      }
+      socket.emit('toggle_module', { module: 'ai_survival', state: e.target.checked });
     });
   }
 
@@ -1154,7 +1187,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
   window.addEventListener('keydown', (e) => {
     // Không bắt phím khi đang gõ chat hoặc nhập liệu cấu hình
-    if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'SELECT') {
+    if (
+      document.activeElement.tagName === 'INPUT' ||
+      document.activeElement.tagName === 'SELECT' ||
+      document.activeElement.tagName === 'TEXTAREA' ||
+      document.activeElement.isContentEditable
+    ) {
       return;
     }
 
@@ -1166,7 +1204,7 @@ document.addEventListener('DOMContentLoaded', () => {
     else if (key === 's') direction = 'back';
     else if (key === 'a') direction = 'left';
     else if (key === 'd') direction = 'right';
-    else if (e.key === ' ') direction = 'jump';
+    else if (e.key === ' ' || e.key === 'Spacebar') direction = 'jump';
     else if (e.key === 'Shift') direction = 'sneak';
     else if (e.key === 'Control') direction = 'sprint';
 
@@ -1208,7 +1246,7 @@ document.addEventListener('DOMContentLoaded', () => {
     else if (key === 's') direction = 'back';
     else if (key === 'a') direction = 'left';
     else if (key === 'd') direction = 'right';
-    else if (e.key === ' ') direction = 'jump';
+    else if (e.key === ' ' || e.key === 'Spacebar') direction = 'jump';
     else if (e.key === 'Shift') direction = 'sneak';
     else if (e.key === 'Control') direction = 'sprint';
 
@@ -1236,6 +1274,36 @@ document.addEventListener('DOMContentLoaded', () => {
         if (btn) btn.classList.remove('bg-purpleAccent', 'text-white', 'border-purpleGlow');
         stopRotationLoop();
       }
+    }
+  });
+
+  const resetAllLocalControls = () => {
+    // Reset di chuyển
+    ['forward', 'back', 'left', 'right', 'jump', 'sneak', 'sprint'].forEach(direction => {
+      if (activeKeys[direction]) {
+        activeKeys[direction] = false;
+        if (socket) socket.emit('bot-move', { direction, state: false });
+        const btn = document.getElementById(`btn-move-${direction}`);
+        if (btn) btn.classList.remove('bg-purpleAccent', 'text-white', 'border-purpleGlow');
+      }
+    });
+
+    // Reset xoay nhìn
+    ['up', 'down', 'left', 'right'].forEach(direction => {
+      if (activeRotations[direction]) {
+        activeRotations[direction] = false;
+        const btn = document.getElementById(`btn-look-${direction}`);
+        if (btn) btn.classList.remove('bg-purpleAccent', 'text-white', 'border-purpleGlow');
+      }
+    });
+    
+    stopRotationLoop();
+  };
+
+  window.addEventListener('blur', resetAllLocalControls);
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      resetAllLocalControls();
     }
   });
 
@@ -1267,6 +1335,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     btn.addEventListener('touchstart', startMove, { passive: false });
     btn.addEventListener('touchend', stopMove, { passive: false });
+    btn.addEventListener('touchcancel', stopMove, { passive: false });
   };
 
   const bindLookButton = (id, direction) => {
@@ -1297,6 +1366,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     btn.addEventListener('touchstart', startRot, { passive: false });
     btn.addEventListener('touchend', stopRot, { passive: false });
+    btn.addEventListener('touchcancel', stopRot, { passive: false });
   };
 
   bindMoveButton('btn-move-forward', 'forward');
@@ -1318,7 +1388,6 @@ document.addEventListener('DOMContentLoaded', () => {
       // Dừng mọi phím di chuyển
       ['forward', 'back', 'left', 'right', 'jump', 'sneak', 'sprint'].forEach(direction => {
         activeKeys[direction] = false;
-        if (socket) socket.emit('bot-move', { direction, state: false });
         
         const btn = document.getElementById(`btn-move-${direction}`);
         if (btn) {
@@ -1335,6 +1404,19 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       });
       stopRotationLoop();
+
+      // Tắt Killaura và AI Sinh tồn checkbox trên giao diện ngay lập tức
+      if (killauraToggle) {
+        killauraToggle.checked = false;
+      }
+      if (aisurvivalToggle) {
+        aisurvivalToggle.checked = false;
+      }
+
+      // Gửi tín hiệu dừng toàn bộ lên backend
+      if (socket && socket.connected && isBotOnline) {
+        socket.emit('bot-stop-all');
+      }
     });
   }
 });

@@ -261,6 +261,699 @@ async function eatOffhand(bot) {
   }
 }
 
+// Phân tích kho đồ để phục vụ AI Sinh tồn
+function checkInventoryForSurvival(bot) {
+  const items = bot.inventory.items();
+  const logNames = ['oak_log', 'birch_log', 'spruce_log', 'jungle_log', 'acacia_log', 'dark_oak_log', 'mangrove_log', 'cherry_log'];
+  const plankNames = ['oak_planks', 'birch_planks', 'spruce_planks', 'jungle_planks', 'acacia_planks', 'dark_oak_planks', 'mangrove_planks', 'cherry_planks'];
+  
+  const logs = items.filter(i => logNames.includes(i.name) || i.name.includes('_log'));
+  const planks = items.filter(i => plankNames.includes(i.name) || i.name.includes('_planks'));
+  const sticks = items.filter(i => i.name === 'stick');
+  const craftingTables = items.filter(i => i.name === 'crafting_table');
+  
+  const pickaxes = items.filter(i => i.name.includes('_pickaxe'));
+  const swords = items.filter(i => i.name.includes('_sword'));
+  
+  const totalLogs = logs.reduce((sum, i) => sum + i.count, 0);
+  const totalPlanks = planks.reduce((sum, i) => sum + i.count, 0);
+  const totalSticks = sticks.reduce((sum, i) => sum + i.count, 0);
+  const totalCraftingTables = craftingTables.reduce((sum, i) => sum + i.count, 0);
+  
+  const stones = items.filter(i => i.name === 'cobblestone' || i.name === 'stone' || i.name === 'deepslate_cobblestone');
+  const totalStones = stones.reduce((sum, i) => sum + i.count, 0);
+
+  const hasStonePickaxe = pickaxes.some(i => i.name === 'stone_pickaxe' || i.name === 'iron_pickaxe' || i.name === 'diamond_pickaxe');
+  const hasWoodPickaxe = pickaxes.some(i => i.name === 'wooden_pickaxe');
+  const hasPickaxe = pickaxes.length > 0;
+  
+  const hasStoneSword = swords.some(i => i.name === 'stone_sword' || i.name === 'iron_sword' || i.name === 'diamond_sword');
+  const hasSword = swords.length > 0;
+
+  return {
+    totalLogs,
+    totalPlanks,
+    totalSticks,
+    totalCraftingTables,
+    totalStones,
+    hasPickaxe,
+    hasWoodPickaxe,
+    hasStonePickaxe,
+    hasSword,
+    hasStoneSword
+  };
+}
+
+// Hàm tự động đi nhặt các item rơi xung quanh
+async function collectNearbyItems(bot) {
+  const { goals } = require('mineflayer-pathfinder');
+  let attempts = 0;
+  while (attempts < 10) {
+    const itemEntity = bot.nearestEntity(e => 
+      e && 
+      (e.name === 'item' || e.type === 'item' || e.type === 'object') && 
+      e.position && 
+      e.position.distanceTo(bot.entity.position) < 16
+    );
+    if (!itemEntity) break;
+    
+    console.log(`[Collect] Tìm thấy vật phẩm rơi ở cách ${bot.entity.position.distanceTo(itemEntity.position).toFixed(1)}m. Tiến hành đi nhặt...`);
+    try {
+      const targetGoal = goals.GoalNear 
+        ? new goals.GoalNear(itemEntity.position.x, itemEntity.position.y, itemEntity.position.z, 1.0)
+        : new goals.GoalBlock(itemEntity.position.x, itemEntity.position.y, itemEntity.position.z);
+      
+      await bot.pathfinder.goto(targetGoal);
+      await new Promise(resolve => setTimeout(resolve, 300));
+    } catch (e) {
+      console.warn('[Collect] Lỗi khi di chuyển tới nhặt vật phẩm:', e.message);
+      break;
+    }
+    attempts++;
+  }
+}
+
+// Helper: Nhảy và đặt block dưới chân
+async function scaffoldUp(bot, scaffoldItem) {
+  const { Vec3 } = require('vec3');
+  const blockBelow = bot.blockAt(bot.entity.position.offset(0, -1, 0));
+  if (!blockBelow) return false;
+
+  try {
+    await bot.equip(scaffoldItem, 'hand');
+    
+    // Nhảy lên
+    bot.setControlState('jump', true);
+    await new Promise(resolve => setTimeout(resolve, 150));
+    bot.setControlState('jump', false);
+
+    // Nhìn xuống dưới chân và đặt block
+    await bot.lookAt(blockBelow.position.offset(0.5, 1.0, 0.5));
+    await bot.placeBlock(blockBelow, new Vec3(0, 1, 0));
+    
+    // Chờ 300ms để server đồng bộ vị trí đứng của bot trên block mới
+    await new Promise(resolve => setTimeout(resolve, 300));
+    return true;
+  } catch (err) {
+    console.error('[Scaffold Up Error]:', err.message);
+    return false;
+  }
+}
+
+// Helper: Chặt cột cây gỗ hoàn chỉnh, hỗ trợ kê chân leo lên nếu cây cao
+async function chopTree(bot, startLogBlock) {
+  const { goals } = require('mineflayer-pathfinder');
+  const Vec3 = require('vec3');
+  
+  // 1. Đi tới gốc cây
+  try {
+    await bot.pathfinder.goto(new goals.GoalLookAtBlock(startLogBlock.position, bot.world));
+  } catch (e) {
+    console.warn('[Chop Tree] Không thể di chuyển tới gốc cây:', e.message);
+    return;
+  }
+
+  const startY = Math.floor(bot.entity.position.y);
+  const treeX = startLogBlock.position.x;
+  const treeZ = startLogBlock.position.z;
+
+  // Quét tìm tất cả các block gỗ cùng cột X, Z từ gốc lên trên (tối đa cao hơn bot 8 block)
+  let yOffset = 0;
+  let logBlocks = [];
+  while (yOffset < 10) {
+    const checkPos = new Vec3(treeX, startLogBlock.position.y + yOffset, treeZ);
+    const block = bot.blockAt(checkPos);
+    if (block && block.name.includes('_log')) {
+      logBlocks.push(block);
+    } else if (yOffset > 0) {
+      break;
+    }
+    yOffset++;
+  }
+
+  if (logBlocks.length === 0) return;
+
+  bot.chat(`Bắt đầu chặt cây cao ${logBlocks.length} block...`);
+
+  for (const log of logBlocks) {
+    const currentLog = bot.blockAt(log.position);
+    if (!currentLog || !currentLog.name.includes('_log')) continue;
+
+    let botY = Math.floor(bot.entity.position.y);
+    let logY = log.position.y;
+
+    // Nếu block gỗ cao quá tầm tay
+    while (logY - botY > 2) {
+      const solidBlockNames = ['dirt', 'cobblestone', 'stone', 'planks', 'grass_block', 'andesite', 'diorite', 'granite'];
+      const scaffoldItem = bot.inventory.items().find(i => solidBlockNames.some(name => i.name.includes(name)));
+      
+      if (!scaffoldItem) {
+        bot.chat('Gỗ cao quá tầm tay mà tôi không có block nào để kê chân!');
+        break;
+      }
+
+      bot.chat('Đặt block kê chân để leo lên chặt gỗ cao...');
+      const success = await scaffoldUp(bot, scaffoldItem);
+      if (!success) break;
+      
+      botY = Math.floor(bot.entity.position.y);
+    }
+
+    // Tiến hành chặt khúc gỗ
+    try {
+      await bot.lookAt(log.position.offset(0.5, 0.5, 0.5));
+      const axeEquip = bot.inventory.items().find(i => i.name.includes('_axe'));
+      if (axeEquip) await bot.equip(axeEquip, 'hand');
+      await bot.dig(log);
+      await new Promise(resolve => setTimeout(resolve, 200));
+      await collectNearbyItems(bot);
+    } catch (e) {
+      console.warn(`[Chop Tree] Lỗi chặt khúc gỗ Y=${log.position.y}:`, e.message);
+    }
+  }
+
+  // Thu dọn giàn giáo và đi xuống đất
+  let currentY = Math.floor(bot.entity.position.y);
+  if (currentY > startY) {
+    bot.chat('Đang dọn block kê chân để đi xuống...');
+  }
+  while (currentY > startY) {
+    const blockBelow = bot.blockAt(bot.entity.position.offset(0, -1, 0));
+    if (blockBelow && blockBelow.name !== 'air' && blockBelow.name !== 'bedrock') {
+      try {
+        const shovelOrPick = bot.inventory.items().find(i => i.name.includes('_shovel') || i.name.includes('_pickaxe') || i.name.includes('_axe'));
+        if (shovelOrPick) await bot.equip(shovelOrPick, 'hand');
+        
+        await bot.dig(blockBelow);
+        await new Promise(resolve => setTimeout(resolve, 200));
+        await collectNearbyItems(bot);
+      } catch (e) {
+        console.warn('[Chop Tree] Lỗi dọn block kê chân:', e.message);
+        break;
+      }
+    } else {
+      break;
+    }
+    currentY = Math.floor(bot.entity.position.y);
+  }
+}
+
+// Chế độ tự sinh tồn AI (AI Survival Loop v2)
+function startSurvivalLoop(bot, socket) {
+  if (bot.survivalInterval) clearInterval(bot.survivalInterval);
+  
+  bot.aiSurvivalEnabled = true;
+  bot.isSurvivalBusy = false;
+
+  // Đăng ký sự kiện chết để tự động hồi sinh
+  if (!bot.aiSurvivalDeathHandler) {
+    bot.aiSurvivalDeathHandler = () => {
+      if (bot.aiSurvivalEnabled) {
+        console.log('[AI Survival] Bot đã chết. Tự động hồi sinh sau 2 giây...');
+        bot.isSurvivalBusy = false; // Reset trạng thái bận
+        setTimeout(() => {
+          try {
+            if (bot && typeof bot.respawn === 'function') {
+              bot.respawn();
+              socket.emit('bot-chat', {
+                sender: 'System',
+                message: '💀 Bot đã chết và tự động hồi sinh.',
+                time: new Date().toLocaleTimeString('vi-VN', { hour12: false })
+              });
+            }
+          } catch (e) {
+            console.error('[AI Survival] Lỗi hồi sinh:', e.message);
+          }
+        }, 2000);
+      }
+    };
+    bot.on('death', bot.aiSurvivalDeathHandler);
+  }
+
+  socket.emit('bot-chat', {
+    sender: 'System',
+    message: '❌ BẬT Chế độ AI Sinh Tồn v2 (Chặt cây, đào đá, tự chế tạo cúp/kiếm)',
+    time: new Date().toLocaleTimeString('vi-VN', { hour12: false })
+  });
+
+  bot.survivalInterval = setInterval(async () => {
+    if (!bot.entity) return;
+    if (bot.isSleeping) return;
+    if (bot.isSurvivalBusy) return;
+
+    bot.isSurvivalBusy = true;
+    try {
+      const { goals } = require('mineflayer-pathfinder');
+      const mcData = require('minecraft-data')(bot.version);
+      const { Vec3 } = require('vec3');
+
+      // 1. Kiểm tra máu để chạy trốn (Flee)
+      if (bot.health !== undefined && bot.health < 8) {
+        const hostile = bot.nearestEntity(e => 
+          e && e.isValid !== false && e.id !== bot.entity.id &&
+          (e.type === 'hostile' || e.type === 'mob') && 
+          e.position && e.position.distanceTo(bot.entity.position) < 12
+        );
+        if (hostile) {
+          socket.emit('bot-chat', {
+            sender: 'System',
+            message: `🏃 AI Sinh Tồn: Máu thấp (${bot.health}/20)! Đang chạy trốn khỏi ${hostile.name || hostile.type}...`,
+            time: new Date().toLocaleTimeString('vi-VN', { hour12: false })
+          });
+          
+          const awayVec = bot.entity.position.clone().subtract(hostile.position).normalize().scale(15);
+          const targetPos = bot.entity.position.clone().add(awayVec);
+          
+          if (bot.pathfinder) {
+            try {
+              bot.pathfinder.setGoal(new goals.GoalXZ(targetPos.x, targetPos.z), true);
+              bot.setControlState('sprint', true);
+              // Chạy trốn trong 4 giây
+              await new Promise(resolve => setTimeout(resolve, 4000));
+            } catch (e) {}
+          }
+          return;
+        }
+      }
+
+      // 2. Đi ngủ nếu trời tối hoặc mưa bão (Auto Sleep)
+      const timeOfDay = bot.time ? bot.time.timeOfDay : 0;
+      const isNight = timeOfDay >= 12000 && timeOfDay <= 23000;
+      const isRaining = bot.isRaining;
+
+      if ((isNight || isRaining) && bot.pathfinder) {
+        const bedBlock = bot.findBlock({
+          matching: block => {
+            if (!block) return false;
+            const name = block.name.toLowerCase();
+            return name.includes('bed') && !name.includes('bedrock');
+          },
+          maxDistance: 16
+        });
+
+        if (bedBlock) {
+          const dist = bedBlock.position.distanceTo(bot.entity.position);
+          if (dist > 2.5) {
+            socket.emit('bot-chat', {
+              sender: 'System',
+              message: '🛌 AI Sinh Tồn: Trời tối/mưa. Đang di chuyển tìm giường ngủ...',
+              time: new Date().toLocaleTimeString('vi-VN', { hour12: false })
+            });
+            try {
+              await bot.pathfinder.goto(new goals.GoalGetToBlock(bedBlock.position.x, bedBlock.position.y, bedBlock.position.z));
+            } catch (e) {}
+          } else {
+            socket.emit('bot-chat', {
+              sender: 'System',
+              message: '🛌 AI Sinh Tồn: Đang leo lên giường ngủ...',
+              time: new Date().toLocaleTimeString('vi-VN', { hour12: false })
+            });
+            try {
+              await bot.sleep(bedBlock);
+            } catch (sleepErr) {
+              console.warn('[AI Survival] Không ngủ được:', sleepErr.message);
+            }
+          }
+          return;
+        }
+      }
+
+      // Phân tích túi đồ để ra quyết định cày cuốc / chế tạo
+      const inv = checkInventoryForSurvival(bot);
+
+      // 3. Quy trình chế tạo công cụ & cày cuốc
+      // 3. Quy trình chế tạo công cụ & cày cuốc
+      // Tính toán lượng ván gỗ ảo (virtual planks) và lượng cần thiết
+      const virtualPlanks = inv.totalPlanks + (inv.totalLogs * 4);
+      let planksNeeded = 0;
+      if (inv.totalCraftingTables === 0) {
+        planksNeeded += 4; // Cần bàn chế tạo
+      }
+      if (!inv.hasPickaxe) {
+        planksNeeded += 3; // Cần cúp gỗ
+        if (inv.totalSticks < 2) planksNeeded += 2; // Cần gậy (2 planks = 4 gậy)
+      } else {
+        // Đã có cúp, nhưng nếu thiếu gậy để làm cúp đá/kiếm đá
+        if (inv.totalSticks < 4) planksNeeded += 2;
+      }
+
+      // Bước 3.1: Đi chặt gỗ nếu thiếu gỗ để chế tạo các công cụ cơ bản
+      if (virtualPlanks < planksNeeded) {
+        socket.emit('bot-chat', {
+          sender: 'System',
+          message: `🪓 AI Sinh Tồn: Thiếu gỗ (Hiện có: ${virtualPlanks}/${planksNeeded} ván gỗ)! Đi chặt cây...`,
+          time: new Date().toLocaleTimeString('vi-VN', { hour12: false })
+        });
+
+        const logBlock = bot.findBlock({
+          matching: block => block && block.name.includes('_log'),
+          maxDistance: 32
+        });
+
+        if (logBlock) {
+          try {
+            await chopTree(bot, logBlock);
+          } catch (e) {
+            console.warn('[AI Survival] Lỗi chặt cây:', e.message);
+          }
+        } else {
+          socket.emit('bot-chat', {
+            sender: 'System',
+            message: '🌳 AI Sinh Tồn: Không tìm thấy cây xung quanh, đang đi tìm kiếm...',
+            time: new Date().toLocaleTimeString('vi-VN', { hour12: false })
+          });
+          // Đi dạo để tìm kiếm cây
+          const rx = (Math.random() - 0.5) * 40;
+          const rz = (Math.random() - 0.5) * 40;
+          const targetX = bot.entity.position.x + rx;
+          const targetZ = bot.entity.position.z + rz;
+          try {
+            await bot.pathfinder.goto(new goals.GoalXZ(targetX, targetZ));
+          } catch (e) {}
+        }
+        return;
+      }
+
+      // Bước 3.2: Chế tạo ván gỗ (Planks) và que gỗ (Sticks) từ gỗ khúc
+      if (inv.totalLogs > 0 && inv.totalPlanks < 8) {
+        socket.emit('bot-chat', {
+          sender: 'System',
+          message: '🪵 AI Sinh Tồn: Đang tự chế tạo Ván gỗ...',
+          time: new Date().toLocaleTimeString('vi-VN', { hour12: false })
+        });
+        const logItem = bot.inventory.items().find(i => i.name.includes('_log'));
+        if (logItem) {
+          const plankName = logItem.name.replace('_log', '_planks');
+          const plankItem = mcData.itemsByName[plankName];
+          if (plankItem) {
+            const recipe = bot.recipesFor(plankItem.id, null, 1, null)[0];
+            if (recipe) await bot.craft(recipe, 1, null);
+          }
+        }
+        return;
+      }
+
+      if (inv.totalPlanks >= 2 && inv.totalSticks < 4) {
+        socket.emit('bot-chat', {
+          sender: 'System',
+          message: '🪵 AI Sinh Tồn: Đang tự chế tạo Que gỗ...',
+          time: new Date().toLocaleTimeString('vi-VN', { hour12: false })
+        });
+        const stickItem = mcData.itemsByName['stick'];
+        if (stickItem) {
+          const recipe = bot.recipesFor(stickItem.id, null, 1, null)[0];
+          if (recipe) await bot.craft(recipe, 1, null);
+        }
+        return;
+      }
+
+      // Bước 3.2.5: Đảm bảo có bàn chế tạo trong túi đồ trước khi chế tạo công cụ chính
+      const needCraftingTable = (!inv.hasPickaxe) || (inv.hasWoodPickaxe && !inv.hasStonePickaxe && inv.totalStones >= 3);
+      if (needCraftingTable && inv.totalCraftingTables === 0) {
+        // Tìm bàn chế tạo đặt sẵn gần đó để đập thu hồi
+        const nearTable = bot.findBlock({
+          matching: block => block && block.name === 'crafting_table',
+          maxDistance: 16
+        });
+        if (nearTable) {
+          socket.emit('bot-chat', {
+            sender: 'System',
+            message: '🛠️ AI Sinh Tồn: Phát hiện Bàn chế tạo gần đó, tiến lại thu hồi...',
+            time: new Date().toLocaleTimeString('vi-VN', { hour12: false })
+          });
+          try {
+            await bot.pathfinder.goto(new goals.GoalLookAtBlock(nearTable.position, bot.world));
+            const tool = bot.inventory.items().find(i => i.name.includes('_axe') || i.name.includes('_pickaxe'));
+            if (tool) await bot.equip(tool, 'hand');
+            await bot.dig(nearTable);
+            await new Promise(resolve => setTimeout(resolve, 200));
+            await collectNearbyItems(bot);
+          } catch (e) {
+            console.warn('[AI Survival] Lỗi thu hồi bàn chế tạo:', e.message);
+          }
+          return;
+        }
+
+        // Tự chế tạo bàn chế tạo mới nếu đủ ván gỗ
+        if (inv.totalPlanks >= 4) {
+          socket.emit('bot-chat', {
+            sender: 'System',
+            message: '🛠️ AI Sinh Tồn: Tự chế tạo Bàn chế tạo mới...',
+            time: new Date().toLocaleTimeString('vi-VN', { hour12: false })
+          });
+          const tableItem = mcData.itemsByName['crafting_table'];
+          if (tableItem) {
+            const recipe = bot.recipesFor(tableItem.id, null, 1, null)[0];
+            if (recipe) await bot.craft(recipe, 1, null);
+          }
+          return;
+        }
+      }
+
+      // Bước 3.3: Nếu chưa có cúp gỗ, chế tạo cúp gỗ + kiếm gỗ
+      if (!inv.hasPickaxe) {
+        if (inv.totalCraftingTables > 0 && inv.totalPlanks >= 3 && inv.totalSticks >= 2) {
+          // Bắt đầu quy trình đặt bàn chế tạo để làm Cúp gỗ
+          socket.emit('bot-chat', {
+            sender: 'System',
+            message: '🛠️ AI Sinh Tồn: Đặt bàn chế tạo để chế tạo Cúp gỗ & Kiếm gỗ...',
+            time: new Date().toLocaleTimeString('vi-VN', { hour12: false })
+          });
+          await craftToolsWithTable(bot, socket, 'wooden_pickaxe');
+          return;
+        }
+      }
+
+      // Bước 3.4: Nếu đã có cúp gỗ nhưng chưa có cúp đá, đi đào đá
+      if (inv.hasPickaxe && !inv.hasStonePickaxe && inv.totalStones < 8) {
+        socket.emit('bot-chat', {
+          sender: 'System',
+          message: '🪨 AI Sinh Tồn: Đi đào Đá để nâng cấp công cụ...',
+          time: new Date().toLocaleTimeString('vi-VN', { hour12: false })
+        });
+
+        const stoneBlock = bot.findBlock({
+          matching: block => block && (block.name === 'stone' || block.name === 'cobblestone' || block.name === 'deepslate' || block.name === 'andesite' || block.name === 'diorite' || block.name === 'granite'),
+          maxDistance: 32
+        });
+
+        if (stoneBlock) {
+          try {
+            await bot.pathfinder.goto(new goals.GoalLookAtBlock(stoneBlock.position, bot.world));
+            const pick = bot.inventory.items().find(i => i.name.includes('_pickaxe'));
+            if (pick) await bot.equip(pick, 'hand');
+            await bot.dig(stoneBlock);
+            await new Promise(resolve => setTimeout(resolve, 200));
+            await collectNearbyItems(bot);
+          } catch (e) {
+            console.warn('[AI Survival] Lỗi đào đá:', e.message);
+          }
+        } else {
+          socket.emit('bot-chat', {
+            sender: 'System',
+            message: '🪨 AI Sinh Tồn: Không tìm thấy đá xung quanh, đang đi tìm kiếm...',
+            time: new Date().toLocaleTimeString('vi-VN', { hour12: false })
+          });
+          // Đi dạo để tìm kiếm đá
+          const rx = (Math.random() - 0.5) * 40;
+          const rz = (Math.random() - 0.5) * 40;
+          const targetX = bot.entity.position.x + rx;
+          const targetZ = bot.entity.position.z + rz;
+          try {
+            await bot.pathfinder.goto(new goals.GoalXZ(targetX, targetZ));
+          } catch (e) {}
+        }
+        return;
+      }
+
+      // Bước 3.5: Nếu có đá và cúp gỗ, chế tạo cúp đá và kiếm đá để tự vệ khỏe hơn
+      if (inv.hasWoodPickaxe && !inv.hasStonePickaxe && inv.totalStones >= 3 && inv.totalSticks >= 2) {
+        socket.emit('bot-chat', {
+          sender: 'System',
+          message: '🛠️ AI Sinh Tồn: Đặt bàn chế tạo để nâng cấp lên Cúp đá & Kiếm đá...',
+          time: new Date().toLocaleTimeString('vi-VN', { hour12: false })
+        });
+        await craftToolsWithTable(bot, socket, 'stone_pickaxe');
+        return;
+      }
+
+      // Bước 3.6: Nếu đã có kiếm đá/cúp đá, đi tìm quặng sắt hoặc quặng than gần đó để đào làm tài nguyên
+      if (inv.hasStonePickaxe) {
+        const oreBlock = bot.findBlock({
+          matching: block => block && (block.name.includes('coal_ore') || block.name.includes('iron_ore') || block.name.includes('copper_ore')),
+          maxDistance: 32
+        });
+
+        if (oreBlock) {
+          socket.emit('bot-chat', {
+            sender: 'System',
+            message: `⛏️ AI Sinh Tồn: Phát hiện quặng ${oreBlock.name}! Tiến tới khai thác...`,
+            time: new Date().toLocaleTimeString('vi-VN', { hour12: false })
+          });
+          try {
+            await bot.pathfinder.goto(new goals.GoalLookAtBlock(oreBlock.position, bot.world));
+            const pick = bot.inventory.items().find(i => i.name.includes('_pickaxe'));
+            if (pick) await bot.equip(pick, 'hand');
+            await bot.dig(oreBlock);
+            await new Promise(resolve => setTimeout(resolve, 200));
+            await collectNearbyItems(bot);
+          } catch (e) {
+            console.warn('[AI Survival] Lỗi đào quặng:', e.message);
+          }
+          return;
+        }
+      }
+
+      // 4. Nếu không có gì nguy hiểm và là ban ngày -> đi dạo (tỉ lệ 5%)
+      if (!isNight && !isRaining && Math.random() < 0.05 && bot.pathfinder && !bot.pathfinder.isMoving()) {
+        const rx = (Math.random() - 0.5) * 10;
+        const rz = (Math.random() - 0.5) * 10;
+        const targetX = bot.entity.position.x + rx;
+        const targetZ = bot.entity.position.z + rz;
+        try {
+          bot.pathfinder.setGoal(new goals.GoalXZ(targetX, targetZ));
+        } catch (e) {}
+      }
+
+    } catch (err) {
+      console.error('[AI Survival Loop Error]:', err.stack);
+    } finally {
+      bot.isSurvivalBusy = false;
+    }
+  }, 1000);
+}
+
+// Helper: Đặt bàn chế tạo, làm công cụ và thu hồi
+async function craftToolsWithTable(bot, socket, toolToCraft) {
+  const { Vec3 } = require('vec3');
+  const mcData = require('minecraft-data')(bot.version);
+
+  // 1. Tìm khối đất/khối rắn bên cạnh bot để đặt bàn chế tạo lên (tránh tự kẹt và va chạm hình hộp)
+  if (!bot.entity || !bot.entity.position) return;
+  const botFloorPos = bot.entity.position.floored();
+  const referenceBlock = bot.findBlock({
+    matching: block => {
+      if (!block || !block.position || block.name === 'air' || block.name === 'water' || block.name === 'lava' || block.name === 'crafting_table') return false;
+      
+      // Tránh block trực tiếp dưới chân bot
+      const distToFeet = block.position.distanceTo(botFloorPos.offset(0, -1, 0));
+      if (distToFeet < 0.5) return false;
+      
+      // Đảm bảo block ngay trên referenceBlock là trống hoặc cỏ/tuyết có thể thay thế được
+      const blockAbove = bot.blockAt(block.position.offset(0, 1, 0));
+      if (!blockAbove) return false;
+      const passable = ['air', 'snow', 'grass', 'fern', 'bush', 'flower', 'tall_grass'].some(name => blockAbove.name.includes(name));
+      if (!passable) return false;
+
+      // Tránh va chạm với hình hộp (bounding box) của bot
+      const targetPos = block.position.offset(0, 1, 0);
+      const dx = Math.abs(bot.entity.position.x - (targetPos.x + 0.5));
+      const dz = Math.abs(bot.entity.position.z - (targetPos.z + 0.5));
+      const dy = Math.abs(bot.entity.position.y - targetPos.y);
+      if (dx < 0.7 && dz < 0.7 && dy < 1.8) return false;
+
+      return true;
+    },
+    maxDistance: 4
+  });
+
+  if (!referenceBlock) {
+    console.warn('[AI Survival] Không tìm thấy block thích hợp để đặt bàn chế tạo.');
+    return;
+  }
+
+  try {
+    // 2. Trang bị bàn chế tạo lên tay
+    const tableItem = bot.inventory.items().find(i => i.name === 'crafting_table');
+    if (!tableItem) return;
+
+    await bot.equip(tableItem, 'hand');
+
+    // Quay mặt nhìn vào điểm đặt để tránh lỗi đặt lệch/hụt
+    await bot.lookAt(referenceBlock.position.offset(0.5, 1.0, 0.5));
+
+    // Đặt bàn chế tạo trên mặt trên của block tham chiếu
+    const faceVector = new Vec3(0, 1, 0);
+    await bot.placeBlock(referenceBlock, faceVector);
+
+    // Chờ 0.5s để server cập nhật block đặt
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    // 3. Tìm block bàn chế tạo vừa đặt trong thế giới
+    const tableBlock = bot.findBlock({
+      matching: block => block && block.name === 'crafting_table',
+      maxDistance: 5
+    });
+
+    if (tableBlock) {
+      // 4. Tiến hành chế tạo công cụ chính (wooden_pickaxe hoặc stone_pickaxe)
+      const targetTool = mcData.itemsByName[toolToCraft];
+      if (targetTool) {
+        const recipe = bot.recipesFor(targetTool.id, null, 1, tableBlock)[0];
+        if (recipe) {
+          await bot.craft(recipe, 1, tableBlock);
+          socket.emit('bot-chat', {
+            sender: 'System',
+            message: `✔️ AI Sinh Tồn: Chế tạo thành công [${targetTool.displayName}]!`,
+            time: new Date().toLocaleTimeString('vi-VN', { hour12: false })
+          });
+        }
+      }
+
+      // Chế tạo thêm Kiếm gỗ/đá nếu chưa có vũ khí tốt để tự vệ
+      const isStone = toolToCraft.startsWith('stone');
+      const swordToCraft = isStone ? 'stone_sword' : 'wooden_sword';
+      const targetSword = mcData.itemsByName[swordToCraft];
+      const items = bot.inventory.items();
+      const hasGoodSword = items.some(i => i.name === swordToCraft || i.name.includes('iron_sword') || i.name.includes('diamond_sword'));
+      
+      if (targetSword && !hasGoodSword) {
+        const recipeSword = bot.recipesFor(targetSword.id, null, 1, tableBlock)[0];
+        if (recipeSword) {
+          await bot.craft(recipeSword, 1, tableBlock);
+          socket.emit('bot-chat', {
+            sender: 'System',
+            message: `✔️ AI Sinh Tồn: Chế tạo thành công [${targetSword.displayName}]!`,
+            time: new Date().toLocaleTimeString('vi-VN', { hour12: false })
+          });
+        }
+      }
+
+      // 5. Đập vỡ bàn chế tạo để thu hồi lại
+      socket.emit('bot-chat', {
+        sender: 'System',
+        message: '🛠️ AI Sinh Tồn: Đập phá bàn chế tạo để thu hồi vào hòm đồ...',
+        time: new Date().toLocaleTimeString('vi-VN', { hour12: false })
+      });
+      // Trang bị rìu hoặc cúp để đập bàn chế tạo nhanh hơn
+      const tool = bot.inventory.items().find(i => i.name.includes('_axe') || i.name.includes('_pickaxe'));
+      if (tool) await bot.equip(tool, 'hand');
+      await bot.dig(tableBlock);
+      await new Promise(resolve => setTimeout(resolve, 200));
+      await collectNearbyItems(bot);
+    }
+  } catch (err) {
+    console.error('[AI Survival Crafting Error]:', err.message);
+  }
+}
+
+function stopSurvivalLoop(bot) {
+  bot.isSurvivalBusy = false;
+  if (bot.survivalInterval) {
+    clearInterval(bot.survivalInterval);
+    bot.survivalInterval = null;
+  }
+  if (bot.aiSurvivalDeathHandler) {
+    bot.removeListener('death', bot.aiSurvivalDeathHandler);
+    bot.aiSurvivalDeathHandler = null;
+  }
+  if (bot.pathfinder) {
+    try {
+      bot.pathfinder.setGoal(null);
+    } catch (e) {}
+  }
+}
+
 // Hàm tự động phát hiện và giải quyết Captcha dạng văn bản bằng Regex
 function checkAndSolveCaptcha(messageStr, bot) {
   if (!messageStr || !bot) return;
@@ -1045,6 +1738,7 @@ io.on('connection', (socket) => {
 
       // Đóng viewer 3D, localtunnel và dừng killaura nếu có
       if (bot) {
+        stopSurvivalLoop(bot);
         if (bot.killauraInterval) {
           clearInterval(bot.killauraInterval);
           bot.killauraInterval = null;
@@ -1716,6 +2410,377 @@ io.on('connection', (socket) => {
       }
     });
 
+    // Hàm xử lý lệnh chat/thì thầm từ người chơi
+    async function handleChatCommand(username, message) {
+      const msgLower = message.toLowerCase().trim();
+      const { goals } = require('mineflayer-pathfinder');
+      const player = bot.players[username];
+
+      if (['lại đây', 'lai day', 'đến đây', 'den day', 'come', 'here'].includes(msgLower)) {
+        if (!player || !player.entity) {
+          bot.chat(`Không nhìn thấy bạn, ${username}!`);
+          return;
+        }
+        bot.chat(`Đang đi tới chỗ của ${username}...`);
+        try {
+          bot.isSurvivalBusy = true; 
+          await bot.pathfinder.goto(new goals.GoalFollow(player.entity, 1));
+          bot.chat(`Đã tới chỗ ${username}!`);
+        } catch (e) {
+          bot.chat(`Lỗi di chuyển: ${e.message}`);
+        } finally {
+          bot.isSurvivalBusy = false;
+        }
+      } 
+      else if (['đi theo', 'di theo', 'follow', 'theo tôi', 'theo toi'].includes(msgLower)) {
+        if (!player || !player.entity) {
+          bot.chat(`Không nhìn thấy bạn để đi theo, ${username}!`);
+          return;
+        }
+        bot.chat(`Bắt đầu đi theo ${username}. Chat 'dừng' để hủy.`);
+        try {
+          bot.isSurvivalBusy = true;
+          bot.pathfinder.setGoal(new goals.GoalFollow(player.entity, 2), true);
+        } catch (e) {
+          bot.chat(`Lỗi di chuyển: ${e.message}`);
+          bot.isSurvivalBusy = false;
+        }
+      } 
+      else if (['dừng lại', 'dừng', 'dung lai', 'dung', 'stop'].includes(msgLower)) {
+        bot.chat(`Đã dừng các hành động.`);
+        bot.isSurvivalBusy = false;
+        try {
+          bot.pathfinder.setGoal(null);
+        } catch (e) {}
+      }
+      else if (['sinh tồn', 'sinh ton', 'survival'].includes(msgLower)) {
+        if (bot.aiSurvivalEnabled) {
+          stopSurvivalLoop(bot);
+          bot.chat(`Đã TẮT chế độ tự sinh tồn.`);
+          socket.emit('bot-chat', {
+            sender: 'System',
+            message: '❌ TẮT Chế độ AI Sinh Tồn v2',
+            time: new Date().toLocaleTimeString('vi-VN', { hour12: false })
+          });
+        } else {
+          startSurvivalLoop(bot, socket);
+          bot.chat(`Đã BẬT chế độ tự sinh tồn.`);
+        }
+      }
+      else if (['tình trạng', 'tinh trang', 'status', 'info'].includes(msgLower)) {
+        const pos = bot.entity.position;
+        bot.chat(`Máu: ${bot.health || 20}/20 | Thức ăn: ${bot.food || 20}/20 | Tọa độ: X:${pos.x.toFixed(1)}, Y:${pos.y.toFixed(1)}, Z:${pos.z.toFixed(1)}`);
+      }
+      else if (['chặt cây', 'chat cay', 'chặt gỗ', 'chat go', 'chop'].includes(msgLower)) {
+        bot.chat('Đang đi tìm cây để chặt...');
+        const logBlock = bot.findBlock({
+          matching: block => block && block.name.includes('_log'),
+          maxDistance: 32
+        });
+        if (logBlock) {
+          try {
+            bot.isSurvivalBusy = true;
+            await chopTree(bot, logBlock);
+            bot.chat('Đã hoàn thành chặt cây!');
+          } catch (e) {
+            bot.chat(`Lỗi chặt cây: ${e.message}`);
+          } finally {
+            bot.isSurvivalBusy = false;
+          }
+        } else {
+          bot.chat('Không tìm thấy cây nào trong bán kính 32m.');
+        }
+      }
+      else if (['chế bàn', 'che ban', 'chế tạo bàn chế tạo', 'che tao ban che tao', 'craft table'].includes(msgLower)) {
+        const mcData = require('minecraft-data')(bot.version);
+        const inv = checkInventoryForSurvival(bot);
+        if (inv.totalPlanks < 4 && inv.totalLogs > 0) {
+          bot.chat('Thiếu ván gỗ, đang tự chế tạo ván gỗ từ gỗ khúc...');
+          const logItem = bot.inventory.items().find(i => i.name.includes('_log'));
+          if (logItem) {
+            const plankName = logItem.name.replace('_log', '_planks');
+            const plankItem = mcData.itemsByName[plankName];
+            if (plankItem) {
+              const recipe = bot.recipesFor(plankItem.id, null, 1, null)[0];
+              if (recipe) await bot.craft(recipe, 1, null);
+            }
+          }
+          Object.assign(inv, checkInventoryForSurvival(bot));
+        }
+
+        if (inv.totalPlanks >= 4) {
+          bot.chat('Đang chế tạo Bàn chế tạo...');
+          const tableItem = mcData.itemsByName['crafting_table'];
+          if (tableItem) {
+            const recipe = bot.recipesFor(tableItem.id, null, 1, null)[0];
+            if (recipe) {
+              await bot.craft(recipe, 1, null);
+              bot.chat('Đã chế tạo xong Bàn chế tạo!');
+            } else {
+              bot.chat('Không tìm thấy công thức chế tạo bàn chế tạo.');
+            }
+          }
+        } else {
+          bot.chat(`Không đủ gỗ. Cần ít nhất 4 ván gỗ (hiện có: ${inv.totalPlanks}).`);
+        }
+      }
+      else if (['đặt bàn', 'dat ban', 'đặt bàn chế tạo', 'dat ban che tao', 'place table'].includes(msgLower)) {
+        const tableItem = bot.inventory.items().find(i => i.name === 'crafting_table');
+        if (!tableItem) {
+          bot.chat('Không có Bàn chế tạo trong túi đồ!');
+          return;
+        }
+
+        bot.chat('Đang tìm vị trí thích hợp để đặt bàn chế tạo...');
+        const botFloorPos = bot.entity.position.floored();
+        const referenceBlock = bot.findBlock({
+          matching: block => {
+            if (!block || !block.position || block.name === 'air' || block.name === 'water' || block.name === 'lava' || block.name === 'crafting_table') return false;
+            const distToFeet = block.position.distanceTo(botFloorPos.offset(0, -1, 0));
+            if (distToFeet < 0.5) return false;
+            const blockAbove = bot.blockAt(block.position.offset(0, 1, 0));
+            if (!blockAbove) return false;
+            const passable = ['air', 'snow', 'grass', 'fern', 'bush', 'flower', 'tall_grass'].some(name => blockAbove.name.includes(name));
+            if (!passable) return false;
+            const targetPos = block.position.offset(0, 1, 0);
+            const dx = Math.abs(bot.entity.position.x - (targetPos.x + 0.5));
+            const dz = Math.abs(bot.entity.position.z - (targetPos.z + 0.5));
+            const dy = Math.abs(bot.entity.position.y - targetPos.y);
+            if (dx < 0.7 && dz < 0.7 && dy < 1.8) return false;
+            return true;
+          },
+          maxDistance: 4
+        });
+
+        if (referenceBlock) {
+          try {
+            bot.isSurvivalBusy = true;
+            await bot.equip(tableItem, 'hand');
+            const { Vec3 } = require('vec3');
+            await bot.lookAt(referenceBlock.position.offset(0.5, 1.0, 0.5));
+            await bot.placeBlock(referenceBlock, new Vec3(0, 1, 0));
+            bot.chat('Đã đặt bàn chế tạo xuống đất!');
+          } catch (e) {
+            bot.chat(`Lỗi đặt bàn: ${e.message}`);
+          } finally {
+            bot.isSurvivalBusy = false;
+          }
+        } else {
+          bot.chat('Không tìm thấy khối đất trống thích hợp xung quanh.');
+        }
+      }
+      else if (['chế cúp gỗ', 'che cup go', 'chế cúp', 'che cup', 'craft pickaxe'].includes(msgLower)) {
+        const mcData = require('minecraft-data')(bot.version);
+        const tableBlock = bot.findBlock({
+          matching: block => block && block.name === 'crafting_table',
+          maxDistance: 5
+        });
+
+        if (!tableBlock) {
+          bot.chat('Không tìm thấy Bàn chế tạo nào đang đặt gần đây!');
+          return;
+        }
+
+        const inv = checkInventoryForSurvival(bot);
+        if (inv.totalPlanks < 3 || inv.totalSticks < 2) {
+          bot.chat('Đang tự chế tạo thêm ván gỗ/que gỗ để đủ nguyên liệu...');
+          if (inv.totalPlanks < 5 && inv.totalLogs > 0) {
+            const logItem = bot.inventory.items().find(i => i.name.includes('_log'));
+            if (logItem) {
+              const plankName = logItem.name.replace('_log', '_planks');
+              const plankItem = mcData.itemsByName[plankName];
+              if (plankItem) {
+                const recipe = bot.recipesFor(plankItem.id, null, 1, null)[0];
+                if (recipe) await bot.craft(recipe, 1, null);
+              }
+            }
+            Object.assign(inv, checkInventoryForSurvival(bot));
+          }
+          if (inv.totalSticks < 2 && inv.totalPlanks >= 2) {
+            const stickItem = mcData.itemsByName['stick'];
+            if (stickItem) {
+              const recipe = bot.recipesFor(stickItem.id, null, 1, null)[0];
+              if (recipe) await bot.craft(recipe, 1, null);
+            }
+            Object.assign(inv, checkInventoryForSurvival(bot));
+          }
+        }
+
+        if (inv.totalPlanks >= 3 && inv.totalSticks >= 2) {
+          bot.chat('Đang chế tạo Cúp gỗ bằng bàn chế tạo...');
+          const toolItem = mcData.itemsByName['wooden_pickaxe'];
+          if (toolItem) {
+            const recipe = bot.recipesFor(toolItem.id, null, 1, tableBlock)[0];
+            if (recipe) {
+              try {
+                bot.isSurvivalBusy = true;
+                await bot.craft(recipe, 1, tableBlock);
+                bot.chat('Đã chế tạo thành công Cúp gỗ!');
+              } catch (e) {
+                bot.chat(`Lỗi chế tạo: ${e.message}`);
+              } finally {
+                bot.isSurvivalBusy = false;
+              }
+            } else {
+              bot.chat('Không tìm thấy công thức cúp gỗ.');
+            }
+          }
+        } else {
+          bot.chat(`Không đủ nguyên liệu! Cần 3 ván gỗ & 2 que gỗ (hiện có: ${inv.totalPlanks} ván, ${inv.totalSticks} que).`);
+        }
+      }
+      else if (['thu hồi bàn', 'thu hoi ban', 'đập bàn', 'dap ban', 'break table'].includes(msgLower)) {
+        const tableBlock = bot.findBlock({
+          matching: block => block && block.name === 'crafting_table',
+          maxDistance: 5
+        });
+        if (tableBlock) {
+          bot.chat('Đang đập bàn chế tạo để thu hồi...');
+          try {
+            bot.isSurvivalBusy = true;
+            const tool = bot.inventory.items().find(i => i.name.includes('_axe') || i.name.includes('_pickaxe'));
+            if (tool) await bot.equip(tool, 'hand');
+            await bot.dig(tableBlock);
+            await new Promise(resolve => setTimeout(resolve, 200));
+            await collectNearbyItems(bot);
+            bot.chat('Đã thu hồi Bàn chế tạo!');
+          } catch (e) {
+            bot.chat(`Lỗi thu hồi: ${e.message}`);
+          } finally {
+            bot.isSurvivalBusy = false;
+          }
+        } else {
+          bot.chat('Không tìm thấy bàn chế tạo nào xung quanh để đập.');
+        }
+      }
+      else if (['nhặt block', 'nhat block', 'nhặt gỗ', 'nhat go', 'nhặt đồ', 'nhat do', 'nhặt', 'nhat', 'collect', 'pickup'].includes(msgLower)) {
+        bot.chat('Đang quét và tự động nhặt các item rơi xung quanh...');
+        try {
+          bot.isSurvivalBusy = true;
+          await collectNearbyItems(bot);
+          bot.chat('Đã quét xong các item xung quanh!');
+        } catch (e) {
+          bot.chat(`Lỗi nhặt item: ${e.message}`);
+        } finally {
+          bot.isSurvivalBusy = false;
+        }
+      }
+      else if (['làm cúp gỗ', 'lam cup go', 'auto pickaxe', 'cúp gỗ tự động', 'cup go tu dong'].includes(msgLower)) {
+        bot.chat('Bắt đầu chuỗi hành động chế tạo Cúp gỗ tự động...');
+        try {
+          bot.isSurvivalBusy = true;
+          const mcData = require('minecraft-data')(bot.version);
+          let inv = checkInventoryForSurvival(bot);
+
+          const virtualPlanks = inv.totalPlanks + (inv.totalLogs * 4);
+          if (virtualPlanks < 9) {
+            bot.chat('Không đủ gỗ để tự động làm! Hãy đi chặt cây thêm.');
+            return;
+          }
+
+          if (inv.totalPlanks < 9 && inv.totalLogs > 0) {
+            bot.chat('Đang tự chế tạo thêm ván gỗ...');
+            const logItem = bot.inventory.items().find(i => i.name.includes('_log'));
+            if (logItem) {
+              const plankName = logItem.name.replace('_log', '_planks');
+              const plankItem = mcData.itemsByName[plankName];
+              if (plankItem) {
+                const recipe = bot.recipesFor(plankItem.id, null, 1, null)[0];
+                if (recipe) await bot.craft(recipe, Math.ceil((9 - inv.totalPlanks) / 4), null);
+              }
+            }
+            inv = checkInventoryForSurvival(bot);
+          }
+
+          if (inv.totalSticks < 2 && inv.totalPlanks >= 2) {
+            bot.chat('Đang tự chế tạo thêm que gỗ...');
+            const stickItem = mcData.itemsByName['stick'];
+            if (stickItem) {
+              const recipe = bot.recipesFor(stickItem.id, null, 1, null)[0];
+              if (recipe) await bot.craft(recipe, 1, null);
+            }
+            inv = checkInventoryForSurvival(bot);
+          }
+
+          if (inv.totalCraftingTables === 0 && inv.totalPlanks >= 4) {
+            bot.chat('Đang tự chế tạo bàn chế tạo...');
+            const tableItem = mcData.itemsByName['crafting_table'];
+            if (tableItem) {
+              const recipe = bot.recipesFor(tableItem.id, null, 1, null)[0];
+              if (recipe) await bot.craft(recipe, 1, null);
+            }
+            inv = checkInventoryForSurvival(bot);
+          }
+
+          const tableItem = bot.inventory.items().find(i => i.name === 'crafting_table');
+          if (!tableItem) {
+            bot.chat('Lỗi: Không tìm thấy bàn chế tạo trong túi đồ.');
+            return;
+          }
+
+          bot.chat('Đang tìm vị trí để đặt bàn chế tạo...');
+          const botFloorPos = bot.entity.position.floored();
+          const referenceBlock = bot.findBlock({
+            matching: block => {
+              if (!block || !block.position || block.name === 'air' || block.name === 'water' || block.name === 'lava' || block.name === 'crafting_table') return false;
+              const distToFeet = block.position.distanceTo(botFloorPos.offset(0, -1, 0));
+              if (distToFeet < 0.5) return false;
+              const blockAbove = bot.blockAt(block.position.offset(0, 1, 0));
+              if (!blockAbove) return false;
+              const passable = ['air', 'snow', 'grass', 'fern', 'bush', 'flower', 'tall_grass'].some(name => blockAbove.name.includes(name));
+              if (!passable) return false;
+              const targetPos = block.position.offset(0, 1, 0);
+              const dx = Math.abs(bot.entity.position.x - (targetPos.x + 0.5));
+              const dz = Math.abs(bot.entity.position.z - (targetPos.z + 0.5));
+              const dy = Math.abs(bot.entity.position.y - targetPos.y);
+              if (dx < 0.7 && dz < 0.7 && dy < 1.8) return false;
+              return true;
+            },
+            maxDistance: 4
+          });
+
+          if (!referenceBlock) {
+            bot.chat('Không tìm thấy block đất rắn bên cạnh để đặt bàn chế tạo.');
+            return;
+          }
+
+          await bot.equip(tableItem, 'hand');
+          const { Vec3 } = require('vec3');
+          await bot.lookAt(referenceBlock.position.offset(0.5, 1.0, 0.5));
+          await bot.placeBlock(referenceBlock, new Vec3(0, 1, 0));
+          await new Promise(resolve => setTimeout(resolve, 800));
+
+          const tableBlock = bot.findBlock({
+            matching: block => block && block.name === 'crafting_table',
+            maxDistance: 5
+          });
+
+          if (tableBlock && inv.totalPlanks >= 3 && inv.totalSticks >= 2) {
+            bot.chat('Đang chế tạo cúp gỗ bằng bàn chế tạo...');
+            const toolItem = mcData.itemsByName['wooden_pickaxe'];
+            if (toolItem) {
+              const recipe = bot.recipesFor(toolItem.id, null, 1, tableBlock)[0];
+              if (recipe) await bot.craft(recipe, 1, tableBlock);
+            }
+          }
+
+          if (tableBlock) {
+            bot.chat('Đang thu hồi lại bàn chế tạo...');
+            const tool = bot.inventory.items().find(i => i.name.includes('_axe') || i.name.includes('_pickaxe'));
+            if (tool) await bot.equip(tool, 'hand');
+            await bot.dig(tableBlock);
+            await new Promise(resolve => setTimeout(resolve, 200));
+            await collectNearbyItems(bot);
+            bot.chat('Đã hoàn thành toàn bộ chuỗi chế tạo Cúp gỗ tự động!');
+          }
+        } catch (e) {
+          bot.chat(`Lỗi chuỗi tự động: ${e.message}`);
+        } finally {
+          bot.isSurvivalBusy = false;
+        }
+      }
+    }
+
     // 4. Nhận tin nhắn chat từ những người chơi khác
     bot.on('chat', (username, message) => {
       // Bỏ qua tin nhắn do chính bot gửi để tránh lặp
@@ -1726,6 +2791,27 @@ io.on('connection', (socket) => {
         message: message,
         type: 'public',
         time: new Date().toLocaleTimeString('vi-VN', { hour12: false })
+      });
+
+      handleChatCommand(username, message).catch(err => {
+        console.error('[Chat Command Error]:', err.message);
+      });
+    });
+
+    // Nhận tin nhắn thì thầm (whisper) từ người chơi khác
+    bot.on('whisper', (username, message) => {
+      if (username === bot.username) return;
+
+      socket.emit('bot-chat', {
+        sender: username,
+        receiver: bot.username,
+        message: message,
+        type: 'private',
+        time: new Date().toLocaleTimeString('vi-VN', { hour12: false })
+      });
+
+      handleChatCommand(username, message).catch(err => {
+        console.error('[Whisper Command Error]:', err.message);
       });
     });
 
@@ -1965,6 +3051,7 @@ io.on('connection', (socket) => {
               if (isPassive) return false;
             }
 
+            if (!entity.position) return false;
             const dist = entity.position.distanceTo(bot.entity.position);
             
             // Log các mục tiêu hợp lệ gần bot trong bán kính 10m
@@ -1976,7 +3063,7 @@ io.on('connection', (socket) => {
             return dist <= 15; // Quét tìm trong bán kính 15m để di chuyển tới
           });
           
-          if (target) {
+          if (target && target.position) {
             // Tự động trang bị vũ khí trước khi tấn công hoặc di chuyển (hỗ trợ cầm 2 tay & thức ăn/táo vàng)
             try {
               const inventoryItems = bot.inventory.items();
@@ -2061,36 +3148,38 @@ io.on('connection', (socket) => {
             }
             
             // 2. Tự động di chuyển đuổi theo mục tiêu bằng Pathfinder
-            if (!currentTarget || currentTarget.id !== target.id) {
-              currentTarget = target;
-              console.log(`[Killaura Path] Thiết lập di chuyển đuổi theo: Name=${target.name || target.type}, ID=${target.id}`);
-              
-              try {
-                const mcData = require('minecraft-data')(bot.version);
-                const { Movements, goals } = require('mineflayer-pathfinder');
-                const defaultMovements = new Movements(bot, mcData);
-                defaultMovements.canDig = false; // Tránh bot tự phá block
-                bot.pathfinder.setMovements(defaultMovements);
+            if (!bot.aiSurvivalEnabled || !bot.isSurvivalBusy) {
+              if (!currentTarget || currentTarget.id !== target.id) {
+                currentTarget = target;
+                console.log(`[Killaura Path] Thiết lập di chuyển đuổi theo: Name=${target.name || target.type}, ID=${target.id}`);
                 
+                try {
+                  const mcData = require('minecraft-data')(bot.version);
+                  const { Movements, goals } = require('mineflayer-pathfinder');
+                  const defaultMovements = new Movements(bot, mcData);
+                  defaultMovements.canDig = false; // Tránh bot tự phá block
+                  bot.pathfinder.setMovements(defaultMovements);
+                  
+                  const isFlying = target.name === 'phantom' || target.name === 'ghast' || target.name === 'ender_dragon' || target.name === 'wither';
+                  if (isFlying) {
+                    // Với mục tiêu bay, di chuyển tới tọa độ X-Z trên mặt đất ngay dưới chân nó
+                    bot.pathfinder.setGoal(new goals.GoalXZ(target.position.x, target.position.z), true);
+                  } else {
+                    // Với Người chơi & Quái vật đi bộ, đuổi sát mục tiêu (phạm vi 2.0m)
+                    bot.pathfinder.setGoal(new goals.GoalFollow(target, 2), true);
+                  }
+                } catch (e) {
+                  console.warn('[Killaura Pathfinder Error]:', e.message);
+                }
+              } else {
                 const isFlying = target.name === 'phantom' || target.name === 'ghast' || target.name === 'ender_dragon' || target.name === 'wither';
                 if (isFlying) {
-                  // Với mục tiêu bay, di chuyển tới tọa độ X-Z trên mặt đất ngay dưới chân nó
-                  bot.pathfinder.setGoal(new goals.GoalXZ(target.position.x, target.position.z), true);
-                } else {
-                  // Với Người chơi & Quái vật đi bộ, đuổi sát mục tiêu (phạm vi 2.0m)
-                  bot.pathfinder.setGoal(new goals.GoalFollow(target, 2), true);
+                  // Cập nhật liên tục tọa độ đuổi theo quái vật đang bay
+                  try {
+                    const { goals } = require('mineflayer-pathfinder');
+                    bot.pathfinder.setGoal(new goals.GoalXZ(target.position.x, target.position.z), true);
+                  } catch (e) {}
                 }
-              } catch (e) {
-                console.warn('[Killaura Pathfinder Error]:', e.message);
-              }
-            } else {
-              const isFlying = target.name === 'phantom' || target.name === 'ghast' || target.name === 'ender_dragon' || target.name === 'wither';
-              if (isFlying) {
-                // Cập nhật liên tục tọa độ đuổi theo quái vật đang bay
-                try {
-                  const { goals } = require('mineflayer-pathfinder');
-                  bot.pathfinder.setGoal(new goals.GoalXZ(target.position.x, target.position.z), true);
-                } catch (e) {}
               }
             }
           } else {
@@ -2098,9 +3187,11 @@ io.on('connection', (socket) => {
             if (currentTarget) {
               console.log(`[Killaura Path] Mục tiêu ngoài bán kính 15m hoặc biến mất. Dừng di chuyển.`);
               currentTarget = null;
-              try {
-                bot.pathfinder.setGoal(null);
-              } catch (e) {}
+              if (!bot.aiSurvivalEnabled || !bot.isSurvivalBusy) {
+                try {
+                  bot.pathfinder.setGoal(null);
+                } catch (e) {}
+              }
             }
           }
         }, 400);
@@ -2116,9 +3207,11 @@ io.on('connection', (socket) => {
           bot.killauraInterval = null;
           console.log(`[Killaura] Đã TẮT module Killaura cho socket ${socket.id}`);
         }
-        try {
-          bot.pathfinder.setGoal(null);
-        } catch (e) {}
+        if (!bot.aiSurvivalEnabled || !bot.isSurvivalBusy) {
+          try {
+            bot.pathfinder.setGoal(null);
+          } catch (e) {}
+        }
         if (bot.pvp) {
           try { bot.pvp.stop(); } catch (e) {}
         }
@@ -2167,6 +3260,18 @@ io.on('connection', (socket) => {
         socket.emit('bot-chat', {
           sender: 'System',
           message: '✔️ TẮT Module Auto-Armor',
+          time: new Date().toLocaleTimeString('vi-VN', { hour12: false })
+        });
+      }
+    } else if (moduleName === 'ai_survival') {
+      bot.aiSurvivalEnabled = state;
+      if (state) {
+        startSurvivalLoop(bot, socket);
+      } else {
+        stopSurvivalLoop(bot);
+        socket.emit('bot-chat', {
+          sender: 'System',
+          message: '✔️ TẮT Chế độ AI Sinh Tồn',
           time: new Date().toLocaleTimeString('vi-VN', { hour12: false })
         });
       }
@@ -2224,6 +3329,60 @@ io.on('connection', (socket) => {
       bot.look(newYaw, newPitch, true);
     } catch (err) {
       console.error('[Bot] Lỗi khi xoay hướng nhìn:', err.message);
+    }
+  });
+
+  // Lắng nghe yêu cầu dừng toàn bộ hoạt động bot (stop all)
+  socket.on('bot-stop-all', () => {
+    const bot = activeBots['default_bot'];
+    if (!bot) return;
+
+    try {
+      // 1. Dừng mọi trạng thái di chuyển thủ công
+      ['forward', 'back', 'left', 'right', 'jump', 'sneak', 'sprint'].forEach(dir => {
+        bot.setControlState(dir, false);
+      });
+
+      // 2. Dừng di chuyển tự động (Pathfinder)
+      if (bot.pathfinder) {
+        try {
+          bot.pathfinder.setGoal(null);
+        } catch (e) {}
+      }
+
+      // 3. Dừng killaura nếu đang bật
+      if (bot.killauraInterval) {
+        clearInterval(bot.killauraInterval);
+        bot.killauraInterval = null;
+        // Đồng bộ trạng thái tắt killaura về frontend
+        socket.emit('module_state_change', { module: 'killaura', state: false });
+        socket.emit('bot-chat', {
+          sender: 'System',
+          message: '✔️ Đã tắt Killaura vì nhận lệnh Dừng (Stop).',
+          time: new Date().toLocaleTimeString('vi-VN', { hour12: false })
+        });
+      }
+
+      // 4. Dừng PvP plugin
+      if (bot.pvp) {
+        try { bot.pvp.stop(); } catch (e) {}
+      }
+
+      // 5. Dừng chế độ AI Sinh tồn nếu đang bật
+      if (bot.aiSurvivalEnabled) {
+        bot.aiSurvivalEnabled = false;
+        stopSurvivalLoop(bot);
+        socket.emit('module_state_change', { module: 'ai_survival', state: false });
+        socket.emit('bot-chat', {
+          sender: 'System',
+          message: '✔️ Đã tắt AI Sinh Tồn vì nhận lệnh Dừng (Stop).',
+          time: new Date().toLocaleTimeString('vi-VN', { hour12: false })
+        });
+      }
+
+      console.log('[Bot] Đã dừng toàn bộ di chuyển, pathfinder, killaura và AI sinh tồn.');
+    } catch (err) {
+      console.error('[Bot] Lỗi khi thực hiện dừng toàn bộ:', err.message);
     }
   });
 
