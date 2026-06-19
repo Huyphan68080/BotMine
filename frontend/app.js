@@ -22,6 +22,18 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnConnectBot = document.getElementById('btn-connect-bot');
   const btnDisconnectBot = document.getElementById('btn-disconnect-bot');
 
+
+
+  // TPA DOM elements
+  const tpaAutoAcceptCheckbox = document.getElementById('tpa-auto-accept');
+  const tpaAutoStatusSpan = document.getElementById('tpa-auto-status');
+  const tpaTargetPlayerInput = document.getElementById('tpa-target-player');
+  const btnTpa = document.getElementById('btn-tpa');
+  const btnTpaHere = document.getElementById('btn-tpa-here');
+  const btnTpaAccept = document.getElementById('btn-tpa-accept');
+  const btnTpaDeny = document.getElementById('btn-tpa-deny');
+  const tpaNotificationContainer = document.getElementById('tpa-notification-container');
+
   const botPulse = document.getElementById('bot-pulse');
   const botPulseRing = document.getElementById('bot-pulse-ring');
   const botDot = document.getElementById('bot-dot');
@@ -123,6 +135,8 @@ document.addEventListener('DOMContentLoaded', () => {
   minecraftVersionSelect.value = localStorage.getItem('mc_bot_version') || 'auto';
   if (lobbyItemInput) lobbyItemInput.value = localStorage.getItem('mc_bot_lobby_item') || '';
   
+
+
   if (lobbyServerPresetSelect) {
     const savedPreset = localStorage.getItem('mc_bot_lobby_server_preset') || 'auto';
     lobbyServerPresetSelect.value = savedPreset;
@@ -342,7 +356,6 @@ document.addEventListener('DOMContentLoaded', () => {
     } else if (preset !== 'auto') {
       lobbyServer = preset;
     }
-
     if (!host || !username) {
       alert('Vui lòng điền đầy đủ IP Server và Tên Bot!');
       return;
@@ -360,12 +373,20 @@ document.addEventListener('DOMContentLoaded', () => {
     localStorage.setItem('mc_bot_lobby_server', lobbyServer);
     localStorage.setItem('mc_bot_lobby_server_preset', preset);
 
+    const autoAcceptTpa = tpaAutoAcceptCheckbox ? tpaAutoAcceptCheckbox.checked : false;
+
     // Gửi sự kiện `start-bot` kèm đầy đủ cấu hình nâng cao bao gồm cả loại quặng muốn đào
     const miningTargetSelect = document.getElementById('mining-target-ore');
     const miningTarget = miningTargetSelect ? miningTargetSelect.value : 'all';
-    socket.emit('start-bot', { host, port, username, password, version, auth, autoReconnect, lobbyItem, lobbyServer, miningTarget });
+    socket.emit('start-bot', { 
+      host, port, username, password, version, auth, autoReconnect, 
+      lobbyItem, lobbyServer, miningTarget,
+      autoAcceptTpa
+    });
     appendChatLog('System', `Yêu cầu kết nối bot [${username}] tới ${host}:${port || '25565'} (Auth: ${auth})...`, 'system');
+
   });
+
 
   // Gửi sự kiện yêu cầu ngắt kết nối bot
   btnDisconnectBot.addEventListener('click', () => {
@@ -906,6 +927,93 @@ document.addEventListener('DOMContentLoaded', () => {
     miningTargetSelect.addEventListener('change', updateMiningTarget);
   }
 
+  // --- TPA Event Listeners ---
+  if (tpaAutoAcceptCheckbox) {
+    // Khôi phục cài đặt từ localStorage
+    const savedTpaAuto = localStorage.getItem('mc_bot_tpa_auto') === 'true';
+    tpaAutoAcceptCheckbox.checked = savedTpaAuto;
+    if (tpaAutoStatusSpan) {
+      if (savedTpaAuto) {
+        tpaAutoStatusSpan.textContent = 'BẬT';
+        tpaAutoStatusSpan.className = 'text-green-400 font-bold font-mono';
+      } else {
+        tpaAutoStatusSpan.textContent = 'TẮT';
+        tpaAutoStatusSpan.className = 'text-zinc-500 font-bold font-mono';
+      }
+    }
+
+    tpaAutoAcceptCheckbox.addEventListener('change', (e) => {
+      const state = e.target.checked;
+      localStorage.setItem('mc_bot_tpa_auto', state);
+      if (tpaAutoStatusSpan) {
+        if (state) {
+          tpaAutoStatusSpan.textContent = 'BẬT';
+          tpaAutoStatusSpan.className = 'text-green-400 font-bold font-mono';
+        } else {
+          tpaAutoStatusSpan.textContent = 'TẮT';
+          tpaAutoStatusSpan.className = 'text-zinc-500 font-bold font-mono';
+        }
+      }
+      if (socket && socket.connected) {
+        socket.emit('toggle_tpa_auto', state);
+      }
+    });
+  }
+
+  if (btnTpa) {
+    btnTpa.addEventListener('click', () => {
+      const player = tpaTargetPlayerInput.value.trim();
+      if (!player) {
+        alert('Vui lòng nhập tên người chơi mục tiêu!');
+        return;
+      }
+      if (socket && socket.connected && isBotOnline) {
+        socket.emit('tpa-send', player);
+        appendChatLog('System', `Đã gửi yêu cầu dịch chuyển tới: ${player}`, 'system');
+      } else {
+        alert('Bot chưa kết nối!');
+      }
+    });
+  }
+
+  if (btnTpaHere) {
+    btnTpaHere.addEventListener('click', () => {
+      const player = tpaTargetPlayerInput.value.trim();
+      if (!player) {
+        alert('Vui lòng nhập tên người chơi mục tiêu!');
+        return;
+      }
+      if (socket && socket.connected && isBotOnline) {
+        socket.emit('tpa-here-send', player);
+        appendChatLog('System', `Đã gửi yêu cầu kéo người chơi ${player} tới vị trí bot`, 'system');
+      } else {
+        alert('Bot chưa kết nối!');
+      }
+    });
+  }
+
+  if (btnTpaAccept) {
+    btnTpaAccept.addEventListener('click', () => {
+      if (socket && socket.connected && isBotOnline) {
+        socket.emit('tpa-action', { action: 'accept' });
+        appendChatLog('System', 'Đã gửi lệnh đồng ý tất cả yêu cầu dịch chuyển.', 'system');
+      } else {
+        alert('Bot chưa kết nối!');
+      }
+    });
+  }
+
+  if (btnTpaDeny) {
+    btnTpaDeny.addEventListener('click', () => {
+      if (socket && socket.connected && isBotOnline) {
+        socket.emit('tpa-action', { action: 'deny' });
+        appendChatLog('System', 'Đã gửi lệnh từ chối tất cả yêu cầu dịch chuyển.', 'system');
+      } else {
+        alert('Bot chưa kết nối!');
+      }
+    });
+  }
+
   if (autoReconnectToggle) {
     autoReconnectToggle.addEventListener('change', (e) => {
       if (autoReconnectCheckbox) {
@@ -1154,6 +1262,83 @@ document.addEventListener('DOMContentLoaded', () => {
           slotDiv.classList.add('bg-zinc-900');
         }
       });
+    });
+
+    socket.on('tpa-request', (data) => {
+      const { sender, type } = data;
+      console.log('[TPA] Nhận yêu cầu TPA từ:', sender, 'Loại:', type);
+
+      const requestTypeStr = type === 'tpa' 
+        ? 'muốn dịch chuyển đến vị trí của Bot' 
+        : 'muốn Bot dịch chuyển đến vị trí của họ';
+
+      // Tạo một phần tử toast banner
+      const toast = document.createElement('div');
+      toast.className = 'bg-zinc-950/90 backdrop-blur-md border border-zinc-850 rounded-xl p-4 shadow-2xl flex flex-col gap-3 pointer-events-auto transition-all duration-300 transform translate-y-4 opacity-0 border-purple-glow';
+      
+      toast.innerHTML = `
+        <div class="flex justify-between items-start">
+          <div class="flex gap-2 items-center">
+            <span class="text-base">🔔</span>
+            <div class="flex flex-col">
+              <span class="text-xs font-bold text-zinc-200 uppercase tracking-wider font-mono">Yêu cầu TPA</span>
+              <span class="text-[10px] text-zinc-400 mt-0.5"><span class="text-purpleAccent font-bold font-mono">${sender}</span> ${requestTypeStr}.</span>
+            </div>
+          </div>
+          <button class="btn-close-toast text-zinc-500 hover:text-zinc-300 transition text-[10px] p-0.5 font-mono select-none">✕</button>
+        </div>
+        <div class="flex gap-2 border-t border-zinc-900/50 pt-2.5">
+          <button class="btn-accept-toast flex-1 bg-green-500/20 hover:bg-green-500/35 text-green-400 border border-green-550/30 font-bold uppercase tracking-widest text-[9px] py-1.5 rounded transition active:scale-95">
+            Đồng ý
+          </button>
+          <button class="btn-deny-toast flex-1 bg-red-500/20 hover:bg-red-500/35 text-red-400 border border-red-550/30 font-bold uppercase tracking-widest text-[9px] py-1.5 rounded transition active:scale-95">
+            Từ chối
+          </button>
+        </div>
+      `;
+
+      if (tpaNotificationContainer) {
+        tpaNotificationContainer.appendChild(toast);
+        
+        // Trigger animation
+        setTimeout(() => {
+          toast.classList.remove('translate-y-4', 'opacity-0');
+          toast.classList.add('translate-y-0', 'opacity-100');
+        }, 10);
+
+        // Auto remove timer
+        let autoRemoveTimer = setTimeout(() => {
+          removeToast();
+        }, 15000);
+
+        function removeToast() {
+          toast.classList.remove('translate-y-0', 'opacity-100');
+          toast.classList.add('translate-y-4', 'opacity-0');
+          setTimeout(() => {
+            toast.remove();
+          }, 300);
+          clearTimeout(autoRemoveTimer);
+        }
+
+        // Event listeners inside toast
+        toast.querySelector('.btn-close-toast').addEventListener('click', removeToast);
+        
+        toast.querySelector('.btn-accept-toast').addEventListener('click', () => {
+          if (socket && socket.connected) {
+            socket.emit('tpa-action', { action: 'accept', sender });
+            appendChatLog('System', `Đã đồng ý yêu cầu dịch chuyển từ: ${sender}`, 'system');
+          }
+          removeToast();
+        });
+
+        toast.querySelector('.btn-deny-toast').addEventListener('click', () => {
+          if (socket && socket.connected) {
+            socket.emit('tpa-action', { action: 'deny', sender });
+            appendChatLog('System', `Đã từ chối yêu cầu dịch chuyển từ: ${sender}`, 'system');
+          }
+          removeToast();
+        });
+      }
     });
   }
 

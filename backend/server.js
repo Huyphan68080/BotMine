@@ -44,6 +44,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
 const mineflayer = require('mineflayer');
+
 const prismarineRegistry = require('prismarine-registry');
 const prismarineChat = require('prismarine-chat');
 
@@ -1173,6 +1174,7 @@ function pingServerPromise(host, port) {
   });
 }
 
+
 // Hàm tìm cổng TCP rảnh ngẫu nhiên để tránh xung đột cổng
 function getFreePort() {
   const net = require('net');
@@ -1299,6 +1301,46 @@ function parseWhisperMessage(msg) {
     };
   }
 
+  return null;
+}
+
+
+// Helper phân tích yêu cầu TPA từ tin nhắn chat
+function parseTpaRequest(messageStr) {
+  if (!messageStr) return null;
+  const cleanStr = messageStr.trim().replace(/\s+/g, ' ');
+  
+  // Các mẫu tiếng Anh và tiếng Việt
+  const patterns = [
+    // TPA (yêu cầu dịch chuyển đến bot)
+    {
+      regex: /([a-zA-Z0-9_]{2,16})\s+(?:wants\s+to\s+teleport\s+to\s+you|has\s+requested\s+to\s+teleport\s+to\s+you)/i,
+      type: 'tpa'
+    },
+    {
+      regex: /([a-zA-Z0-9_]{2,16})\s+(?:muốn\s+dịch\s+chuyển\s+đến\s+bạn|yêu\s+cầu\s+dịch\s+chuyển\s+đến\s+bạn)/i,
+      type: 'tpa'
+    },
+    // TPAHere (yêu cầu kéo bot đến chỗ họ)
+    {
+      regex: /([a-zA-Z0-9_]{2,16})\s+(?:wants\s+you\s+to\s+teleport\s+to\s+them|has\s+requested\s+that\s+you\s+teleport\s+to\s+them)/i,
+      type: 'tpahere'
+    },
+    {
+      regex: /([a-zA-Z0-9_]{2,16})\s+(?:muốn\s+bạn\s+dịch\s+chuyển\s+đến\s+họ|yêu\s+cầu\s+bạn\s+dịch\s+chuyển\s+đến\s+họ)/i,
+      type: 'tpahere'
+    }
+  ];
+
+  for (const pattern of patterns) {
+    const match = cleanStr.match(pattern.regex);
+    if (match) {
+      return {
+        sender: match[1],
+        type: pattern.type
+      };
+    }
+  }
   return null;
 }
 
@@ -1628,9 +1670,10 @@ io.on('connection', (socket) => {
   async function connectBot(config) {
     const { host, port, username, password, version, auth, autoReconnect } = config;
     const socketId = 'default_bot';
-    
+
     // Shadow the outer socket variable to broadcast events via io.emit to all clients
     const socket = {
+
       emit: (event, data) => io.emit(event, data),
       get id() { return 'default_bot'; },
       get connected() { return io.sockets.sockets.size > 0; }
@@ -1790,6 +1833,7 @@ io.on('connection', (socket) => {
       }
     }
 
+
     socket.emit('bot-status', { status: 'connecting', message: 'Đang kết nối tới server Minecraft...' });
 
     // Khởi tạo Mineflayer Bot Options
@@ -1809,10 +1853,14 @@ io.on('connection', (socket) => {
       }
     };
 
+
+
     let bot;
+
     try {
       bot = mineflayer.createBot(botOptions);
       bot.miningTargetOre = config.miningTarget || 'all'; // Lưu quặng ưu tiên đào từ cấu hình người dùng
+      bot.autoAcceptTpa = config.autoAcceptTpa === true; // Lưu cấu hình tự động đồng ý TPA
       bot.entity = { id: -1 }; // Khởi tạo để tránh crash lỗi entity_status khi chưa login
       
       // Chặn và loại bỏ các thực thể Display và các thực thể dễ gây lỗi tương thích
@@ -1911,10 +1959,14 @@ io.on('connection', (socket) => {
           finalReasonText = 'Lỗi: Server đang Offline hoặc Cổng (Port) không chính xác';
         } else if (reasonText.includes('ETIMEDOUT')) {
           finalReasonText = 'Lỗi: Không thể kết nối tới Server (Server Offline hoặc bị Tường lửa chặn)';
+        } else if (reasonText.includes('ECONNABORTED')) {
+          finalReasonText = 'Lỗi: Server đóng kết nối ngay lập tức. Có thể do sai phiên bản hoặc server có Anti-bot.';
         } else if (reasonText.includes('ECONNRESET') || reasonText.includes('socketClosed')) {
           finalReasonText = 'Lỗi: Server từ chối kết nối ngay lập tức (Có thể do sai phiên bản, sai loại Auth hoặc bị chặn IP/Anti-bot)';
         }
       }
+
+
 
       console.log(`[Bot] handleBotDisconnect [${socketId}] - Lý do: ${finalReasonText}. Trạng thái timer: ${reconnectTimers[socketId] ? 'Đang có' : 'Chưa có'}`);
       if (loginTimeoutTimer) {
@@ -3044,6 +3096,25 @@ io.on('connection', (socket) => {
       checkAndSolveCaptcha(messageStr, bot);
       checkAndHandleAuth(messageStr, bot, password);
 
+      // Quét yêu cầu TPA từ tin nhắn
+      const tpaReq = parseTpaRequest(messageStr);
+      if (tpaReq) {
+        console.log(`[TPA] Phát hiện yêu cầu dịch chuyển (${tpaReq.type.toUpperCase()}) từ: ${tpaReq.sender}`);
+        socket.emit('tpa-request', {
+          sender: tpaReq.sender,
+          type: tpaReq.type
+        });
+
+        if (bot.autoAcceptTpa) {
+          setTimeout(() => {
+            if (activeBots[socketId] === bot) {
+              console.log(`[TPA] Tự động đồng ý TPA từ: ${tpaReq.sender}`);
+              bot.chat(`/tpaccept ${tpaReq.sender}`);
+            }
+          }, 1000);
+        }
+      }
+
       const isNormalChat = messageStr.includes('<') && messageStr.includes('>');
       if (!isNormalChat) {
         const whisper = parseWhisperMessage(messageStr);
@@ -3208,6 +3279,51 @@ io.on('connection', (socket) => {
   // Nhận yêu cầu khởi tạo bot từ client
   socket.on('start-bot', (config) => {
     connectBot(config);
+  });
+
+  // Lắng nghe các lệnh điều khiển dịch chuyển TPA
+  socket.on('tpa-send', (player) => {
+    const bot = activeBots['default_bot'];
+    if (bot && player) {
+      console.log(`[Socket] Bot ${bot.username} gửi yêu cầu dịch chuyển tới: ${player}`);
+      bot.chat(`/tpa ${player}`);
+    }
+  });
+
+  socket.on('tpa-here-send', (player) => {
+    const bot = activeBots['default_bot'];
+    if (bot && player) {
+      console.log(`[Socket] Bot ${bot.username} gửi yêu cầu kéo người chơi tới: ${player}`);
+      bot.chat(`/tpahere ${player}`);
+    }
+  });
+
+  socket.on('tpa-action', (data) => {
+    const { action, sender } = data;
+    const bot = activeBots['default_bot'];
+    if (bot) {
+      const targetStr = sender ? ` ${sender}` : '';
+      if (action === 'accept') {
+        console.log(`[Socket] Bot chấp nhận yêu cầu dịch chuyển từ:${targetStr}`);
+        bot.chat(`/tpaccept${targetStr}`);
+      } else if (action === 'deny') {
+        console.log(`[Socket] Bot từ chối yêu cầu dịch chuyển từ:${targetStr}`);
+        bot.chat(`/tpdeny${targetStr}`);
+      }
+    }
+  });
+
+  socket.on('toggle_tpa_auto', (state) => {
+    const bot = activeBots['default_bot'];
+    if (bot) {
+      bot.autoAcceptTpa = state === true;
+      console.log(`[Socket] Cập nhật tự động đồng ý TPA: ${bot.autoAcceptTpa}`);
+      
+      // Đồng thời cập nhật lại trong botConfigs để nếu kết nối lại sẽ giữ nguyên cấu hình này
+      if (botConfigs['default_bot']) {
+        botConfigs['default_bot'].autoAcceptTpa = bot.autoAcceptTpa;
+      }
+    }
   });
 
   // Lắng nghe bật/tắt các module hack từ client
