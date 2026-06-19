@@ -3255,6 +3255,16 @@ io.on('connection', (socket) => {
       }
     });
 
+    // 5.5. Tự động chấp nhận resource pack của server để tránh bị kick
+    bot.on('resourcePack', (url, hash) => {
+      console.log(`[Bot] Nhận yêu cầu tải resource pack từ server: ${url}. Đang tự động chấp nhận...`);
+      try {
+        bot.acceptResourcePack();
+      } catch (err) {
+        console.error(`[Bot] Không thể tự động chấp nhận resource pack:`, err.message);
+      }
+    });
+
     // 6. Khi bot bị kick khỏi server
     bot.on('kicked', (reason) => {
       const parsedReason = parseKickReason(reason, bot);
