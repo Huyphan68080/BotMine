@@ -2071,6 +2071,8 @@ io.on('connection', (socket) => {
     // 0. Khi bot đã đăng nhập thành công vào server (chưa spawn)
     bot.on('login', () => {
       hasLoggedIn = true;
+      bot.physicsEnabled = false;
+      console.log(`[Bot] Bot [${bot.username}] đã đăng nhập vào server (đang chờ spawn). Tắt tạm thời physics.`);
       timeoutRetryCounts[socketId] = 0; // Reset bộ đếm timeout khi đăng nhập thành công
       if (loginTimeoutTimer) {
         clearTimeout(loginTimeoutTimer);
@@ -2086,6 +2088,26 @@ io.on('connection', (socket) => {
       // Tránh đăng ký trùng lặp sự kiện và gắn lại viewer khi chuyển server selector trong mạng proxy (như Bungee/Velocity)
       if (bot.hasInitializedEvents) {
         console.log('[Bot] Bot đã được khởi tạo các sự kiện trước đó, bỏ qua đăng ký lại.');
+        
+        // Đóng viewer cũ nếu đang chạy để tránh chiếm dụng port và gắn vào client mới
+        if (bot.viewer) {
+          try {
+            bot.viewer.close();
+            console.log('[Bot] Đã đóng viewer cũ thành công khi chuyển cụm.');
+          } catch (e) {
+            console.error('[Bot] Lỗi khi đóng viewer cũ:', e.message);
+          }
+        }
+        
+        // Khởi động lại Viewer 3D gắn vào client mới
+        try {
+          const { mineflayer: mineflayerViewer } = require('prismarine-viewer');
+          mineflayerViewer(bot, { port: 3001, firstPerson: true });
+          console.log('[Bot] Viewer 3D đã được tạo lại và gắn vào bot ở cụm mới.');
+        } catch (e) {
+          console.error('[Bot] Lỗi khi khởi động lại viewer khi chuyển cụm:', e.message);
+        }
+        
         socket.emit('camera_url', globalCameraUrl);
         return;
       }
@@ -2448,7 +2470,8 @@ io.on('connection', (socket) => {
 
     // 1. Khi bot spawn thành công vào game
     bot.on('spawn', () => {
-      console.log(`[Bot] Bot [${bot.username}] đã vào server game thành công.`);
+      bot.physicsEnabled = true;
+      console.log(`[Bot] Bot [${bot.username}] đã vào server game thành công. Đã bật lại physics.`);
       socket.emit('bot-status', { 
         status: 'online', 
         message: `Đã kết nối thành công với tên: ${bot.username}` 
@@ -2570,6 +2593,8 @@ io.on('connection', (socket) => {
 
             if (survivalItem) {
               console.log(`[Lobby Auto] Tìm thấy cụm máy chủ: "${getItemName(survivalItem)}". Tiến hành click slot ${survivalItem.slot}...`);
+              bot.physicsEnabled = false;
+              console.log('[Lobby Auto] Đã tạm thời tắt physics của bot để chuẩn bị chuyển cụm.');
               await bot.clickWindow(survivalItem.slot, 0, 0);
               console.log('[Lobby Auto] Click cụm máy chủ thành công. Dừng kiểm tra sảnh.');
               clearInterval(lobbyInterval);
