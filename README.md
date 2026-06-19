@@ -179,42 +179,116 @@ BotMine/
 
 ---
 
-## ☁️ Deploy Lên Cloud (Online)
+## ☁️ Deploy Lên Cloud (Online 24/7)
 
-Để chạy BotMine online 24/7, bạn có thể deploy Frontend lên **Vercel** và Backend lên **Render**.
+> **Mục tiêu:** Sau khi hoàn thành phần này, bạn sẽ có:
+> - 🌐 **Frontend** chạy trên Vercel (miễn phí, không cần server)
+> - ⚙️ **Backend** chạy trên Render (miễn phí, bot Minecraft hoạt động 24/7)
+> - Bạn có thể điều khiển bot từ bất kỳ đâu qua trình duyệt
 
-### Deploy Frontend → Vercel (miễn phí)
+---
 
-1. Đăng nhập [vercel.com](https://vercel.com/) bằng tài khoản GitHub
-2. Nhấp **Add New → Project** → chọn repository `BotMine`
-3. Vercel tự phát hiện `vercel.json` → nhấp **Deploy** (không cần cấu hình gì thêm)
-4. Nhận URL dạng `https://botmine-ten-ban.vercel.app`
+### 📌 Bước 1 — Fork / Clone lên GitHub của bạn
 
-### Deploy Backend → Render (miễn phí)
+Nếu chưa có repo trên GitHub:
+1. Truy cập `https://github.com/Huyphan68080/BotMine`
+2. Nhấp nút **Fork** (góc trên bên phải) để tạo bản sao vào tài khoản bạn
+3. Bạn sẽ có repo tại: `https://github.com/TEN_BAN/BotMine`
 
-1. Đăng nhập [render.com](https://render.com/) bằng GitHub
-2. Nhấp **New → Web Service** → chọn repo `BotMine`
-3. Điền cài đặt:
+---
 
-   | Tùy chọn | Giá trị |
-   |-----------|---------|
+### 📌 Bước 2 — Deploy Backend lên Render
+
+> Backend là "não" của bot. **Phải deploy Backend trước**, sau đó mới deploy Frontend.
+
+1. Truy cập [render.com](https://render.com/) → Đăng nhập bằng GitHub
+2. Nhấp **New +** → chọn **Web Service**
+3. Chọn repo `BotMine` của bạn → nhấp **Connect**
+4. Điền thông tin cấu hình:
+
+   | Mục | Giá trị cần nhập |
+   |-----|------------------|
+   | **Name** | `botmine-backend` (tên tùy ý) |
    | **Root Directory** | `backend` |
    | **Runtime** | `Node` |
    | **Build Command** | `npm install` |
    | **Start Command** | `npm start` |
+   | **Instance Type** | `Free` |
 
-4. Thêm **Environment Variable**:
-   - `FRONTEND_URL` = `https://botmine-ten-ban.vercel.app` (URL Vercel của bạn)
+5. Cuộn xuống phần **Environment Variables** → nhấp **Add Environment Variable**:
+   - **Key:** `FRONTEND_URL` → **Value:** `*` *(điền `*` tạm thời, sẽ cập nhật sau bước 3)*
 
-5. Nhấp **Deploy Web Service**
+6. Nhấp **Deploy Web Service** → chờ khoảng 2-5 phút để build xong
 
-### Kết Nối Frontend với Backend Cloud
+7. ✅ Sau khi deploy xong, copy URL backend của bạn. Trông sẽ như thế này:
+   ```
+   https://botmine-backend.onrender.com
+   ```
+   *(Lưu URL này lại, bạn sẽ cần ở bước tiếp theo)*
 
-Sau khi deploy xong, mở frontend qua URL đặc biệt để tự động cấu hình backend:
+> ⚠️ **Lưu ý:** Render free tier sẽ tắt máy sau 15 phút không có request. Bot sẽ bị ngắt kết nối khi Render sleep. Upgrade lên $7/tháng để chạy 24/7.
 
+---
+
+### 📌 Bước 3 — Deploy Frontend lên Vercel
+
+> Frontend là giao diện web bạn dùng để điều khiển bot.
+
+1. Truy cập [vercel.com](https://vercel.com/) → Đăng nhập bằng GitHub
+2. Nhấp **Add New** → **Project**
+3. Tìm và chọn repo `BotMine` → nhấp **Import**
+4. Vercel tự phát hiện cấu hình từ `vercel.json` → **KHÔNG cần thay đổi gì**, nhấp thẳng **Deploy**
+5. Chờ khoảng 1 phút → Vercel cấp cho bạn một URL như:
+   ```
+   https://botmine-abc123.vercel.app
+   ```
+   *(Copy URL này lại)*
+
+---
+
+### 📌 Bước 4 — Liên kết Frontend với Backend
+
+Đây là bước quan trọng nhất để frontend biết Backend ở đâu.
+
+**Cách thực hiện:**
+
+Ghép 2 URL lại theo cú pháp sau:
 ```
-https://botmine-ten-ban.vercel.app/?backend=https://ten-backend.onrender.com
+[URL_VERCEL]/?backend=[URL_RENDER]
 ```
+
+**Ví dụ cụ thể:**
+
+Giả sử:
+- URL Vercel của bạn: `https://botmine-abc123.vercel.app`
+- URL Render của bạn: `https://botmine-backend.onrender.com`
+
+Thì URL cuối cùng bạn truy cập sẽ là:
+```
+https://botmine-abc123.vercel.app/?backend=https://botmine-backend.onrender.com
+```
+
+📋 **Chỉ cần mở URL đó một lần** — hệ thống tự lưu vào trình duyệt, lần sau chỉ cần vào `https://botmine-abc123.vercel.app` là đủ.
+
+---
+
+### 📌 Bước 5 — Cập nhật CORS cho Backend (tuỳ chọn nhưng khuyến nghị)
+
+Để bảo mật hơn, thay `*` bằng URL Vercel thật của bạn:
+
+1. Vào [render.com](https://render.com/) → chọn service `botmine-backend`
+2. Vào tab **Environment** → tìm biến `FRONTEND_URL`
+3. Sửa value từ `*` thành URL Vercel: `https://botmine-abc123.vercel.app`
+4. Nhấp **Save Changes** → Render tự khởi động lại service
+
+---
+
+### ✅ Kiểm Tra Hoạt Động
+
+Sau khi xong tất cả bước trên:
+1. Mở URL: `https://botmine-abc123.vercel.app/?backend=https://botmine-backend.onrender.com`
+2. Nhìn góc trên của giao diện — phần hiển thị **BACKEND** phải có màu xanh ✅
+3. Nếu vẫn đỏ → Render chưa khởi động xong, chờ thêm 1-2 phút rồi F5 lại
 
 ---
 
