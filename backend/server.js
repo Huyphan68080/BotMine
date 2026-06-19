@@ -1954,16 +1954,14 @@ io.on('connection', (socket) => {
       }
 
       let finalReasonText = reasonText;
-      if (!hasLoggedIn) {
-        if (reasonText.includes('ECONNREFUSED')) {
-          finalReasonText = 'Lỗi: Server đang Offline hoặc Cổng (Port) không chính xác';
-        } else if (reasonText.includes('ETIMEDOUT')) {
-          finalReasonText = 'Lỗi: Không thể kết nối tới Server (Server Offline hoặc bị Tường lửa chặn)';
-        } else if (reasonText.includes('ECONNABORTED')) {
-          finalReasonText = 'Lỗi: Server đóng kết nối ngay lập tức. Có thể do sai phiên bản hoặc server có Anti-bot.';
-        } else if (reasonText.includes('ECONNRESET') || reasonText.includes('socketClosed')) {
-          finalReasonText = 'Lỗi: Server từ chối kết nối ngay lập tức (Có thể do sai phiên bản, sai loại Auth hoặc bị chặn IP/Anti-bot)';
-        }
+      if (reasonText.includes('ECONNREFUSED')) {
+        finalReasonText = 'Lỗi: Server đang Offline hoặc Cổng (Port) không chính xác';
+      } else if (reasonText.includes('ETIMEDOUT')) {
+        finalReasonText = 'Lỗi: Không thể kết nối tới Server (Server Offline hoặc bị Tường lửa chặn)';
+      } else if (reasonText.includes('ECONNABORTED')) {
+        finalReasonText = 'Lỗi: Server đóng kết nối ngay lập tức. Có thể do sai phiên bản hoặc server có Anti-bot.';
+      } else if (reasonText.includes('ECONNRESET') || reasonText.includes('socketClosed') || reasonText.includes('EPIPE') || reasonText.includes('write EPIPE')) {
+        finalReasonText = 'Lỗi: Kết nối bị ngắt đột ngột (EPIPE/ECONNRESET). Hãy kiểm tra: 1. Đúng phiên bản Minecraft (hãy chọn phiên bản cụ thể thay vì Auto); 2. Server có Anti-bot đang chặn kết nối; 3. Chọn sai chế độ Xác thực (Auth).';
       }
 
 
