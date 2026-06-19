@@ -18,6 +18,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const lobbyItemInput = document.getElementById('lobby-item');
   const lobbyServerInput = document.getElementById('lobby-server');
   const lobbyServerPresetSelect = document.getElementById('lobby-server-preset');
+  const lobbySwitchMethodSelect = document.getElementById('lobby-switch-method');
+  const lobbySwitchCommandInput = document.getElementById('lobby-switch-command');
+  const lobbyItemContainer = document.getElementById('lobby-item-container');
+  const lobbyServerContainer = document.getElementById('lobby-server-container');
+  const lobbySwitchCommandContainer = document.getElementById('lobby-switch-command-container');
 
   const btnConnectBot = document.getElementById('btn-connect-bot');
   const btnDisconnectBot = document.getElementById('btn-disconnect-bot');
@@ -163,6 +168,38 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   if (lobbyServerInput) lobbyServerInput.value = localStorage.getItem('mc_bot_lobby_server') || '';
+
+  // Nạp cấu hình cách chuyển cụm (Lobby Switch Method)
+  if (lobbySwitchMethodSelect) {
+    const savedMethod = localStorage.getItem('mc_bot_lobby_switch_method') || 'menu';
+    lobbySwitchMethodSelect.value = savedMethod;
+    
+    const updateLobbyFields = (method) => {
+      if (method === 'command') {
+        if (lobbyItemContainer) lobbyItemContainer.classList.add('hidden');
+        if (lobbyServerContainer) lobbyServerContainer.classList.add('hidden');
+        if (lobbySwitchCommandContainer) lobbySwitchCommandContainer.classList.remove('hidden');
+      } else {
+        if (lobbyItemContainer) lobbyItemContainer.classList.remove('hidden');
+        if (lobbyServerContainer) lobbyServerContainer.classList.remove('hidden');
+        if (lobbySwitchCommandContainer) lobbySwitchCommandContainer.classList.add('hidden');
+      }
+    };
+    
+    updateLobbyFields(savedMethod);
+    
+    lobbySwitchMethodSelect.addEventListener('change', (e) => {
+      updateLobbyFields(e.target.value);
+      localStorage.setItem('mc_bot_lobby_switch_method', e.target.value);
+    });
+  }
+  
+  if (lobbySwitchCommandInput) {
+    lobbySwitchCommandInput.value = localStorage.getItem('mc_bot_lobby_switch_command') || '/server chill';
+    lobbySwitchCommandInput.addEventListener('input', (e) => {
+      localStorage.setItem('mc_bot_lobby_switch_command', e.target.value);
+    });
+  }
   
   const authTypeSelect = document.getElementById('auth-type');
   const autoReconnectCheckbox = document.getElementById('auto-reconnect');
@@ -356,6 +393,10 @@ document.addEventListener('DOMContentLoaded', () => {
     } else if (preset !== 'auto') {
       lobbyServer = preset;
     }
+
+    const lobbySwitchMethod = lobbySwitchMethodSelect ? lobbySwitchMethodSelect.value : 'menu';
+    const lobbySwitchCommand = lobbySwitchCommandInput ? lobbySwitchCommandInput.value.trim() : '';
+
     if (!host || !username) {
       alert('Vui lòng điền đầy đủ IP Server và Tên Bot!');
       return;
@@ -372,6 +413,8 @@ document.addEventListener('DOMContentLoaded', () => {
     localStorage.setItem('mc_bot_lobby_item', lobbyItem);
     localStorage.setItem('mc_bot_lobby_server', lobbyServer);
     localStorage.setItem('mc_bot_lobby_server_preset', preset);
+    localStorage.setItem('mc_bot_lobby_switch_method', lobbySwitchMethod);
+    localStorage.setItem('mc_bot_lobby_switch_command', lobbySwitchCommand);
 
     const autoAcceptTpa = tpaAutoAcceptCheckbox ? tpaAutoAcceptCheckbox.checked : false;
 
@@ -381,7 +424,8 @@ document.addEventListener('DOMContentLoaded', () => {
     socket.emit('start-bot', { 
       host, port, username, password, version, auth, autoReconnect, 
       lobbyItem, lobbyServer, miningTarget,
-      autoAcceptTpa
+      autoAcceptTpa,
+      lobbySwitchMethod, lobbySwitchCommand
     });
     appendChatLog('System', `Yêu cầu kết nối bot [${username}] tới ${host}:${port || '25565'} (Auth: ${auth})...`, 'system');
 

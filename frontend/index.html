@@ -232,14 +232,14 @@
                   </div>
 
                   <!-- Lobby Item Keyword -->
-                  <div>
+                  <div id="lobby-item-container">
                     <label class="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1.5">Vật phẩm Chọn Cụm</label>
                     <input type="text" id="lobby-item" placeholder="Mặc định: chọn cụm, star" 
                            class="w-full bg-zinc-900 border border-zinc-850 rounded px-3 py-2 text-xs text-zinc-200 focus:outline-none focus-purple-glow transition font-mono h-[34px]">
                   </div>
 
                   <!-- Lobby Server Keyword -->
-                  <div>
+                  <div id="lobby-server-container">
                     <label class="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1.5">Cụm Máy Chủ</label>
                     <select id="lobby-server-preset" 
                             class="w-full bg-zinc-900 border border-zinc-850 rounded px-3 py-2 text-xs text-zinc-200 focus:outline-none focus-purple-glow transition h-[34px] mb-2">
@@ -253,7 +253,25 @@
                     <input type="text" id="lobby-server" placeholder="Nhập từ khóa (vd: survival 2, skyblock)" 
                            class="hidden w-full bg-zinc-900 border border-zinc-850 rounded px-3 py-2 text-xs text-zinc-200 focus:outline-none focus-purple-glow transition font-mono h-[34px]">
                   </div>
+                </div>
 
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4 pt-4 border-t border-zinc-850/30">
+                  <!-- Lobby Switch Method -->
+                  <div>
+                    <label class="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1.5">Cách chuyển cụm (Lobby Switch)</label>
+                    <select id="lobby-switch-method" 
+                            class="w-full bg-zinc-900 border border-zinc-850 rounded px-3 py-2 text-xs text-zinc-200 focus:outline-none focus-purple-glow transition h-[34px]">
+                      <option value="menu" selected>Tự động Click Menu (Sao Nether)</option>
+                      <option value="command">Chạy lệnh để chuyển cụm (Command)</option>
+                    </select>
+                  </div>
+
+                  <!-- Lobby Switch Command -->
+                  <div id="lobby-switch-command-container" class="hidden">
+                    <label class="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1.5">Lệnh chuyển cụm</label>
+                    <input type="text" id="lobby-switch-command" placeholder="Mặc định: /server chill" 
+                           class="w-full bg-zinc-900 border border-zinc-850 rounded px-3 py-2 text-xs text-zinc-200 focus:outline-none focus-purple-glow transition font-mono h-[34px]">
+                  </div>
                 </div>
 
               </details>

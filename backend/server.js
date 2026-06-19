@@ -2532,6 +2532,37 @@ io.on('connection', (socket) => {
 
     // Tự động chuyển server khi phát hiện ở sảnh chờ (Click Nether Star "Chọn Cụm" -> Click "Survival Chill")
     bot.on('spawn', () => {
+      // Nếu cấu hình dùng lệnh chuyển cụm thay vì click menu
+      if (config.lobbySwitchMethod === 'command') {
+        const switchCommand = config.lobbySwitchCommand ? config.lobbySwitchCommand.trim() : '/server chill';
+        console.log(`[Lobby Auto] Cấu hình dùng lệnh. Sẽ gửi lệnh chuyển cụm: "${switchCommand}" định kỳ sau mỗi 4 giây...`);
+        let commandCount = 0;
+        const maxCommands = 5;
+        
+        const sendCommandInterval = setInterval(() => {
+          commandCount++;
+          if (commandCount > maxCommands || !activeBots[socketId] || !bot) {
+            clearInterval(sendCommandInterval);
+            return;
+          }
+          
+          console.log(`[Lobby Auto] Đang gửi lệnh chuyển cụm (Lần ${commandCount}/${maxCommands}): ${switchCommand}`);
+          bot.physicsEnabled = false; // Tắt physics khi chuyển cụm
+          try {
+            bot.chat(switchCommand);
+          } catch (e) {
+            console.error('[Lobby Auto Command Error]:', e.message);
+          }
+        }, 4000);
+        
+        // Hủy interval khi bot đã chuyển cụm và spawn thành công ở cụm mới
+        bot.once('spawn', () => {
+          clearInterval(sendCommandInterval);
+          console.log('[Lobby Auto] Đã chuyển cụm thành công bằng lệnh. Dừng gửi lệnh.');
+        });
+        return;
+      }
+
       let lobbyCheckCount = 0;
       const maxLobbyChecks = 20; // Thử trong 40 giây (2s mỗi lần quét)
       let isWindowOpenRegistered = false;
