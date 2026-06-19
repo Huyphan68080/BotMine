@@ -106,11 +106,11 @@ Hoặc mở thẳng file `frontend/index.html` trong trình duyệt (double-clic
 2. Điền thông tin vào form **Cấu Hình Kết Nối Bot**:
    | Trường | Mô tả | Ví dụ |
    |--------|-------|-------|
-   | **Địa chỉ Server** | IP hoặc domain của server Minecraft | `foxiemc.asia` |
+   | **Địa chỉ Server** | IP hoặc domain của server Minecraft | `play.yourserver.net` |
    | **Cổng (Port)** | Port kết nối (mặc định 25565) | `25565` |
    | **Phiên bản** | Version Minecraft (chọn Auto để tự nhận diện) | `Auto (Tự nhận diện)` |
    | **Tên Bot** | Username của bot | `MyBot_123` |
-   | **Mật khẩu** | Mật khẩu AuthMe (nếu server yêu cầu) | `password123` |
+   | **Mật khẩu** | Mật khẩu AuthMe (nếu server có plugin xác thực) | `YourAuthMePass` |
    | **Xác thực** | Offline (crack) hoặc Microsoft (premium) | `Offline (Crack)` |
 
 3. Nhấn **KẾT NỐI BOT** — Bot sẽ tự động kết nối và hiển thị trạng thái.
