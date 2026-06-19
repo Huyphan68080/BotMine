@@ -1862,6 +1862,7 @@ io.on('connection', (socket) => {
       bot.miningTargetOre = config.miningTarget || 'all'; // Lưu quặng ưu tiên đào từ cấu hình người dùng
       bot.autoAcceptTpa = config.autoAcceptTpa === true; // Lưu cấu hình tự động đồng ý TPA
       bot.entity = { id: -1 }; // Khởi tạo để tránh crash lỗi entity_status khi chưa login
+      bot.hasSwitchedLobby = false; // Đánh dấu chưa chuyển cụm sảnh
       
       // Chặn và loại bỏ các thực thể Display và các thực thể dễ gây lỗi tương thích
       // (text_display, item_display, block_display, interaction, item, xp_orb)
@@ -2530,8 +2531,14 @@ io.on('connection', (socket) => {
 
     // Tự động chuyển server khi phát hiện ở sảnh chờ (Click Nether Star "Chọn Cụm" -> Click "Survival Chill")
     bot.on('spawn', () => {
+      if (bot.hasSwitchedLobby) {
+        console.log('[Lobby Auto] Bot đã chuyển cụm thành công trước đó, bỏ qua chạy lại quét sảnh/chạy lệnh.');
+        return;
+      }
+
       // Nếu cấu hình dùng lệnh chuyển cụm thay vì click menu
       if (config.lobbySwitchMethod === 'command') {
+        bot.hasSwitchedLobby = true; // Đánh dấu đã chuyển cụm sảnh
         const switchCommand = config.lobbySwitchCommand ? config.lobbySwitchCommand.trim() : '/server chill';
         console.log(`[Lobby Auto] Cấu hình dùng lệnh. Sẽ gửi lệnh chuyển cụm: "${switchCommand}" định kỳ sau mỗi 4 giây...`);
         let commandCount = 0;
@@ -2621,6 +2628,7 @@ io.on('connection', (socket) => {
             });
 
             if (survivalItem) {
+              bot.hasSwitchedLobby = true; // Đánh dấu đã chuyển cụm sảnh
               console.log(`[Lobby Auto] Tìm thấy cụm máy chủ: "${getItemName(survivalItem)}". Tiến hành click slot ${survivalItem.slot}...`);
               bot.physicsEnabled = false;
               console.log('[Lobby Auto] Đã tạm thời tắt physics của bot để chuẩn bị chuyển cụm.');
