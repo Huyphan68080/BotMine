@@ -41,11 +41,92 @@ try {
 // =================================================================
 // SYSTEM LOGGING HOOKS (Injected to redirect logs to /api/logs API)
 // =================================================================
+try {
+  require('dotenv').config();
+} catch (e) {
+  // Bỏ qua nếu không có package dotenv (trên Render biến môi trường được inject trực tiếp)
+}
+
 const logsBuffer = [];
 const MAX_LOGS = 100;
 const originalLog = console.log;
 const originalError = console.error;
 const originalWarn = console.warn;
+
+let discordQueue = [];
+let discordFlushTimeout = null;
+
+function sendToDiscordWebhook(vnTime, type, message) {
+  const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
+  if (!webhookUrl) return;
+
+  const lowerMsg = message.toLowerCase();
+  const shouldIgnore = [
+    'bossbar',
+    'phát hiện thực thể',
+    'bản đồ',
+    'viewer',
+    'localtunnel',
+    'socket client',
+    'ping tự động',
+    'xác thực microsoft'
+  ].some(pattern => lowerMsg.includes(pattern));
+
+  if (shouldIgnore) return;
+
+  discordQueue.push(`[${vnTime.split(' ')[0]}] [${type}] ${message}`);
+
+  if (!discordFlushTimeout) {
+    discordFlushTimeout = setTimeout(flushDiscordQueue, 3000);
+  }
+}
+
+function flushDiscordQueue() {
+  const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
+  discordFlushTimeout = null;
+
+  if (discordQueue.length === 0 || !webhookUrl) return;
+
+  const payloadText = discordQueue.join('\n');
+  discordQueue = [];
+
+  try {
+    const https = require('https');
+    const url = require('url');
+    const parsedUrl = url.parse(webhookUrl);
+    
+    let content = payloadText;
+    if (content.length > 1900) {
+      content = content.substring(0, 1850) + '\n... (và các dòng log khác)';
+    }
+
+    const postData = JSON.stringify({ content: `\`\`\`text\n${content}\n\`\`\`` });
+
+    const options = {
+      hostname: parsedUrl.hostname,
+      port: 443,
+      path: parsedUrl.path,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(postData)
+      }
+    };
+
+    const req = https.request(options, (res) => {
+      res.resume();
+    });
+
+    req.on('error', (e) => {
+      originalError('[Webhook Error] Lỗi gửi log tới Discord:', e.message);
+    });
+
+    req.write(postData);
+    req.end();
+  } catch (err) {
+    originalError('[Webhook Error] Lỗi xử lý Webhook:', err.message);
+  }
+}
 
 function addLogToBuffer(type, args) {
   const message = args.map(arg => {
@@ -59,6 +140,9 @@ function addLogToBuffer(type, args) {
   if (logsBuffer.length > MAX_LOGS) {
     logsBuffer.pop();
   }
+
+  // Tự động đẩy log lên Discord Webhook
+  sendToDiscordWebhook(vnTime, type, message);
 }
 
 console.log = function(...args) {
