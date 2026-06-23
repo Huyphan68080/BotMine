@@ -38,8 +38,61 @@ try {
 } catch (err) {
   console.error('[Cảnh báo] Lỗi khi hook minecraft-data:', err.message);
 }
+// =================================================================
+// SYSTEM LOGGING HOOKS (Injected to redirect logs to /api/logs API)
+// =================================================================
+const logsBuffer = [];
+const MAX_LOGS = 100;
+const originalLog = console.log;
+const originalError = console.error;
+const originalWarn = console.warn;
 
-const express = require('express');
+function addLogToBuffer(type, args) {
+  const message = args.map(arg => {
+    if (typeof arg === 'object') {
+      try { return JSON.stringify(arg); } catch (e) { return String(arg); }
+    }
+    return String(arg);
+  }).join(' ');
+  const vnTime = new Date().toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' });
+  logsBuffer.unshift({ timestamp: vnTime, type: type, message: message });
+  if (logsBuffer.length > MAX_LOGS) {
+    logsBuffer.pop();
+  }
+}
+
+console.log = function(...args) {
+  originalLog.apply(console, args);
+  addLogToBuffer('LOG', args);
+};
+console.error = function(...args) {
+  originalError.apply(console, args);
+  addLogToBuffer('ERROR', args);
+};
+console.warn = function(...args) {
+  originalWarn.apply(console, args);
+  addLogToBuffer('WARN', args);
+};
+
+const originalExpress = require('express');
+const express = function() {
+  const app = originalExpress();
+  
+  // Enable CORS configuration to allow cross-origin requests for logs endpoint
+  app.use((req, res, next) => {
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
+    next();
+  });
+
+  // Expose JSON logs endpoint
+  app.get('/api/logs', (req, res) => {
+    res.json(logsBuffer);
+  });
+
+  return app;
+};
+Object.assign(express, originalExpress);
 const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
