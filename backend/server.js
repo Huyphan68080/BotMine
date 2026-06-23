@@ -3291,6 +3291,9 @@ io.on('connection', (socket) => {
     bot.on('messagestr', (messageStr) => {
       if (!messageStr.trim()) return;
       
+      // Ghi nhận tin nhắn game ra console log để lưu trữ và stream lên Discord Webhook
+      console.log(`[Game Chat] ${messageStr.trim()}`);
+      
       // Tự động kiểm tra và giải captcha nếu có
       checkAndSolveCaptcha(messageStr, bot);
       checkAndHandleAuth(messageStr, bot, password);
