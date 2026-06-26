@@ -1746,6 +1746,8 @@ async function startCameraTunnel() {
       const localtunnel = require('localtunnel');
       console.log(`[Camera Tunnel] Đang khởi tạo localtunnel trên port ${port}...`);
       const tunnel = await localtunnel({ port });
+      // Tăng giới hạn số lượng listeners để tránh cảnh báo MaxListenersExceededWarning khi localtunnel kết nối nhiều tunnel socket
+      tunnel.setMaxListeners(50);
       globalCameraUrl = tunnel.url;
       console.log(`[Camera Tunnel] Khởi tạo thành công. Public URL: ${globalCameraUrl}`);
       
