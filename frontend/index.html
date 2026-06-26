@@ -473,6 +473,31 @@
             </div>
           </div>
 
+          <!-- Anti-AFK Module Card -->
+          <div class="bg-zinc-950 border border-zinc-900 p-4.5 rounded-xl flex flex-col justify-between space-y-4 shadow-lg">
+            <div class="flex items-center justify-between">
+              <div>
+                <span class="text-sm font-bold text-zinc-200 tracking-wide block">Chống AFK (Anti-AFK)</span>
+                <span class="text-[10px] text-zinc-500 mt-1 block">Cử động và xoay đầu để không bị kick hoặc đưa ra spawn</span>
+              </div>
+              <label class="relative inline-flex items-center cursor-pointer select-none">
+                <input type="checkbox" id="antiafk-toggle" class="sr-only peer">
+                <div class="w-9 h-5 bg-zinc-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-zinc-550 after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-purpleAccent peer-checked:after:bg-white"></div>
+              </label>
+            </div>
+            
+            <div class="border-t border-zinc-900/60 pt-3 space-y-2">
+              <div class="flex justify-between items-center text-[10px] font-mono text-zinc-500">
+                <span>Trạng thái hoạt động</span>
+                <span id="antiafk-status" class="text-zinc-500 font-bold font-mono">TẮT</span>
+              </div>
+              <div class="flex justify-between items-center text-[10px] font-mono text-zinc-500">
+                <span>Chu kỳ cử động</span>
+                <span class="text-purpleAccent font-bold">30 giây / lần</span>
+              </div>
+            </div>
+          </div>
+
         </div>
       </div>
 

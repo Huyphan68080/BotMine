@@ -2069,6 +2069,11 @@ io.on('connection', (socket) => {
           bot.killauraInterval = null;
           console.log(`[Bot] Đã tắt killaura của ${socketId} do ngắt kết nối.`);
         }
+        if (bot.antiAfkInterval) {
+          clearInterval(bot.antiAfkInterval);
+          bot.antiAfkInterval = null;
+          console.log(`[Bot] Đã tắt Anti-AFK của ${socketId} do ngắt kết nối.`);
+        }
         if (bot.pvp) {
           try { bot.pvp.stop(); } catch (e) {}
         }
@@ -2612,6 +2617,25 @@ io.on('connection', (socket) => {
         status: 'online', 
         message: `Đã kết nối thành công với tên: ${bot.username}` 
       });
+
+      // Tự động bật Chống AFK nếu được tích chọn sẵn trong cấu hình
+      if (config.antiAfk === true && !bot.antiAfkInterval) {
+        bot.antiAfkEnabled = true;
+        bot.antiAfkInterval = setInterval(() => {
+          if (!bot.entity) return;
+          console.log(`[Anti-AFK] Thực hiện hành động cử động chống AFK cho ${bot.username}...`);
+          try {
+            bot.swingArm('right');
+            const yaw = bot.entity.yaw + (Math.random() - 0.5) * 0.5;
+            const pitch = bot.entity.pitch + (Math.random() - 0.5) * 0.2;
+            bot.look(yaw, pitch, true);
+          } catch (e) {
+            console.error('[Anti-AFK Spawn Action Error]:', e.message);
+          }
+        }, 30000);
+        console.log(`[Anti-AFK] Đã tự động kích hoạt Module Chống AFK cho ${bot.username} khi spawn.`);
+        socket.emit('module_state_change', { module: 'antiafk', state: true });
+      }
 
       // Gửi thông số tọa độ ban đầu
       if (bot.entity) {
@@ -3821,6 +3845,43 @@ io.on('connection', (socket) => {
         socket.emit('bot-chat', {
           sender: 'System',
           message: '✔️ TẮT Chế độ AI Sinh Tồn',
+          time: new Date().toLocaleTimeString('vi-VN', { hour12: false })
+        });
+      }
+    } else if (moduleName === 'antiafk') {
+      bot.antiAfkEnabled = state;
+      if (state) {
+        if (bot.antiAfkInterval) clearInterval(bot.antiAfkInterval);
+        
+        bot.antiAfkInterval = setInterval(() => {
+          if (!bot.entity) return;
+          console.log(`[Anti-AFK] Thực hiện hành động cử động chống AFK cho ${bot.username}...`);
+          try {
+            // 1. Vung tay để mô phỏng hoạt động
+            bot.swingArm('right');
+            
+            // 2. Xoay đầu nhẹ ngẫu nhiên để mô phỏng di chuyển góc nhìn
+            const yaw = bot.entity.yaw + (Math.random() - 0.5) * 0.5;
+            const pitch = bot.entity.pitch + (Math.random() - 0.5) * 0.2;
+            bot.look(yaw, pitch, true);
+          } catch (e) {
+            console.error('[Anti-AFK Action Error]:', e.message);
+          }
+        }, 30000); // 30s một lần
+        
+        socket.emit('bot-chat', {
+          sender: 'System',
+          message: '❌ BẬT Module Chống AFK (Anti-AFK)',
+          time: new Date().toLocaleTimeString('vi-VN', { hour12: false })
+        });
+      } else {
+        if (bot.antiAfkInterval) {
+          clearInterval(bot.antiAfkInterval);
+          bot.antiAfkInterval = null;
+        }
+        socket.emit('bot-chat', {
+          sender: 'System',
+          message: '✔️ TẮT Module Chống AFK (Anti-AFK)',
           time: new Date().toLocaleTimeString('vi-VN', { hour12: false })
         });
       }

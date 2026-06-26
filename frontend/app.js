@@ -417,6 +417,7 @@ document.addEventListener('DOMContentLoaded', () => {
     localStorage.setItem('mc_bot_lobby_switch_command', lobbySwitchCommand);
 
     const autoAcceptTpa = tpaAutoAcceptCheckbox ? tpaAutoAcceptCheckbox.checked : false;
+    const antiAfk = antiafkToggle ? antiafkToggle.checked : false;
 
     // Gửi sự kiện `start-bot` kèm đầy đủ cấu hình nâng cao bao gồm cả loại quặng muốn đào
     const miningTargetSelect = document.getElementById('mining-target-ore');
@@ -425,7 +426,8 @@ document.addEventListener('DOMContentLoaded', () => {
       host, port, username, password, version, auth, autoReconnect, 
       lobbyItem, lobbyServer, miningTarget,
       autoAcceptTpa,
-      lobbySwitchMethod, lobbySwitchCommand
+      lobbySwitchMethod, lobbySwitchCommand,
+      antiAfk
     });
     appendChatLog('System', `Yêu cầu kết nối bot [${username}] tới ${host}:${port || '25565'} (Auth: ${auth})...`, 'system');
 
@@ -880,6 +882,14 @@ document.addEventListener('DOMContentLoaded', () => {
       } else if (module === 'ai_survival') {
         const toggle = document.getElementById('aisurvival-toggle');
         if (toggle) toggle.checked = state;
+      } else if (module === 'antiafk') {
+        const toggle = document.getElementById('antiafk-toggle');
+        if (toggle) toggle.checked = state;
+        const status = document.getElementById('antiafk-status');
+        if (status) {
+          status.textContent = state ? 'BẬT' : 'TẮT';
+          status.className = state ? 'text-green-400 font-bold font-mono' : 'text-zinc-500 font-bold font-mono';
+        }
       }
     });
   }
@@ -891,6 +901,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const autoReconnectToggle = document.getElementById('auto-reconnect-toggle');
   const killauraDualwieldToggle = document.getElementById('killaura-dualwield-toggle');
   const aisurvivalToggle = document.getElementById('aisurvival-toggle');
+  const antiafkToggle = document.getElementById('antiafk-toggle');
+  const antiafkStatus = document.getElementById('antiafk-status');
 
   if (killauraDualwieldToggle) {
     // Khôi phục trạng thái từ localStorage
@@ -951,6 +963,31 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
       socket.emit('toggle_module', { module: 'ai_survival', state: e.target.checked });
+    });
+  }
+
+  if (antiafkToggle) {
+    // Khôi phục trạng thái từ localStorage
+    const savedAntiAfk = localStorage.getItem('mc_bot_antiafk') === 'true';
+    antiafkToggle.checked = savedAntiAfk;
+    if (antiafkStatus) {
+      antiafkStatus.textContent = savedAntiAfk ? 'BẬT' : 'TẮT';
+      antiafkStatus.className = savedAntiAfk ? 'text-green-400 font-bold font-mono' : 'text-zinc-500 font-bold font-mono';
+    }
+
+    antiafkToggle.addEventListener('change', (e) => {
+      if (!socket || !socket.connected || !isBotOnline) {
+        alert('Bot chưa kết nối! Vui lòng kết nối Bot trước khi bật Chống AFK.');
+        e.target.checked = false;
+        return;
+      }
+      const state = e.target.checked;
+      localStorage.setItem('mc_bot_antiafk', state);
+      if (antiafkStatus) {
+        antiafkStatus.textContent = state ? 'BẬT' : 'TẮT';
+        antiafkStatus.className = state ? 'text-green-400 font-bold font-mono' : 'text-zinc-500 font-bold font-mono';
+      }
+      socket.emit('toggle_module', { module: 'antiafk', state: state });
     });
   }
 
