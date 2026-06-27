@@ -55,6 +55,7 @@ const originalWarn = console.warn;
 
 let discordQueue = [];
 let discordFlushTimeout = null;
+let isRateLimited = false;
 
 function sendToDiscordWebhook(vnTime, type, message) {
   const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
@@ -76,7 +77,7 @@ function sendToDiscordWebhook(vnTime, type, message) {
 
   discordQueue.push(`[${vnTime.split(' ')[0]}] [${type}] ${message}`);
 
-  if (!discordFlushTimeout) {
+  if (!discordFlushTimeout && !isRateLimited) {
     discordFlushTimeout = setTimeout(flushDiscordQueue, 3000);
   }
 }
@@ -85,7 +86,7 @@ function flushDiscordQueue() {
   const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
   discordFlushTimeout = null;
 
-  if (discordQueue.length === 0 || !webhookUrl) return;
+  if (discordQueue.length === 0 || !webhookUrl || isRateLimited) return;
 
   const payloadText = discordQueue.join('\n');
   discordQueue = [];
@@ -114,14 +115,59 @@ function flushDiscordQueue() {
     };
 
     const req = https.request(options, (res) => {
-      if (res.statusCode !== 200 && res.statusCode !== 204) {
-        originalError(`[Webhook Error] Discord trả về mã lỗi: ${res.statusCode}`);
-      }
-      res.resume();
+      let body = '';
+      res.setEncoding('utf8');
+      res.on('data', (chunk) => {
+        body += chunk;
+      });
+      res.on('end', () => {
+        if (res.statusCode !== 200 && res.statusCode !== 204) {
+          originalError(`[Webhook Error] Discord trả về mã lỗi: ${res.statusCode}`);
+          if (res.statusCode === 429) {
+            try {
+              const parsed = JSON.parse(body);
+              let retryAfter = parsed.retry_after || 5;
+              if (retryAfter < 1000) {
+                retryAfter = retryAfter * 1000;
+              }
+              retryAfter += 500; // Thêm 500ms dự phòng để đảm bảo reset hoàn toàn
+              
+              originalError(`[Webhook Error] Đang bị giới hạn tần suất gửi (Rate Limit). Sẽ thử gửi lại sau ${retryAfter}ms.`);
+              
+              // Trả ngược các dòng log chưa gửi được về hàng đợi đầu
+              const failedLogs = payloadText.split('\n').filter(line => line.trim() !== '');
+              discordQueue.unshift(...failedLogs);
+              
+              // Đặt trạng thái giới hạn tần suất và thử lại sau
+              isRateLimited = true;
+              setTimeout(() => {
+                isRateLimited = false;
+                flushDiscordQueue();
+              }, retryAfter);
+            } catch (err) {
+              originalError(`[Webhook Error] Không thể phân tích phản hồi 429:`, err.message);
+              // Phục hồi log và chờ mặc định 5s
+              const failedLogs = payloadText.split('\n').filter(line => line.trim() !== '');
+              discordQueue.unshift(...failedLogs);
+              isRateLimited = true;
+              setTimeout(() => {
+                isRateLimited = false;
+                flushDiscordQueue();
+              }, 5000);
+            }
+          }
+        }
+      });
     });
 
     req.on('error', (e) => {
       originalError('[Webhook Error] Lỗi gửi log tới Discord:', e.message);
+      // Khi gặp lỗi kết nối (ví dụ: mất mạng), đưa log trở lại hàng đợi để gửi sau
+      const failedLogs = payloadText.split('\n').filter(line => line.trim() !== '');
+      discordQueue.unshift(...failedLogs);
+      if (!discordFlushTimeout && !isRateLimited) {
+        discordFlushTimeout = setTimeout(flushDiscordQueue, 5000);
+      }
     });
 
     req.write(postData);
