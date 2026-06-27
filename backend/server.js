@@ -114,6 +114,9 @@ function flushDiscordQueue() {
     };
 
     const req = https.request(options, (res) => {
+      if (res.statusCode !== 200 && res.statusCode !== 204) {
+        originalError(`[Webhook Error] Discord trả về mã lỗi: ${res.statusCode}`);
+      }
       res.resume();
     });
 
@@ -4122,5 +4125,10 @@ server.listen(PORT, () => {
   console.log(` Minecraft Bot Manager Backend is running on port ${PORT}`);
   console.log(` Endpoint ping: http://localhost:${PORT}/ping`);
   console.log(` Môi trường CORS allowed origins: ${allowedOrigins}`);
+  if (process.env.DISCORD_WEBHOOK_URL) {
+    console.log(` Discord Webhook: Đã cấu hình (${process.env.DISCORD_WEBHOOK_URL.substring(0, 35)}...)`);
+  } else {
+    console.log(` Discord Webhook: CHƯA CẤU HÌNH (Sẽ không gửi log chat)`);
+  }
   console.log(`===================================================`);
 });
