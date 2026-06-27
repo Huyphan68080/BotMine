@@ -53,9 +53,46 @@ const originalLog = console.log;
 const originalError = console.error;
 const originalWarn = console.warn;
 
+const path = require('path');
+const fs = require('fs');
+
 let discordQueue = [];
 let discordFlushTimeout = null;
 let isRateLimited = false;
+
+// Đường dẫn lưu file trạng thái cooldown để không bị mất khi restart server (ví dụ do nodemon)
+const cooldownFilePath = path.join(__dirname, 'discord_cooldown.json');
+
+function checkCooldownOnStartup() {
+  try {
+    if (fs.existsSync(cooldownFilePath)) {
+      const data = JSON.parse(fs.readFileSync(cooldownFilePath, 'utf8'));
+      const now = Date.now();
+      if (data.cooldownEnd && data.cooldownEnd > now) {
+        const remaining = data.cooldownEnd - now;
+        isRateLimited = true;
+        originalError(`[Webhook Cooldown] Phát hiện cooldown chưa hết hạn từ phiên chạy trước. Tạm ngưng Webhook trong ${Math.round(remaining / 1000)}s nữa.`);
+        setTimeout(() => {
+          isRateLimited = false;
+          try {
+            if (fs.existsSync(cooldownFilePath)) {
+              fs.unlinkSync(cooldownFilePath);
+            }
+          } catch (err) {}
+          originalLog(`[Webhook Cooldown] Cooldown đã kết thúc. Webhook hoạt động trở lại.`);
+          flushDiscordQueue();
+        }, remaining);
+      } else {
+        // Nếu đã quá thời hạn, xoá file
+        fs.unlinkSync(cooldownFilePath);
+      }
+    }
+  } catch (err) {
+    // Bỏ qua lỗi
+  }
+}
+checkCooldownOnStartup();
+
 
 function sendToDiscordWebhook(vnTime, type, message) {
   const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
@@ -152,8 +189,17 @@ function flushDiscordQueue() {
             
             // Kích hoạt trạng thái giới hạn tần suất
             isRateLimited = true;
+            try {
+              fs.writeFileSync(cooldownFilePath, JSON.stringify({ cooldownEnd: Date.now() + retryAfter }), 'utf8');
+            } catch (fsErr) {}
+
             setTimeout(() => {
               isRateLimited = false;
+              try {
+                if (fs.existsSync(cooldownFilePath)) {
+                  fs.unlinkSync(cooldownFilePath);
+                }
+              } catch (fsErr) {}
               flushDiscordQueue();
             }, retryAfter);
           }
@@ -1741,7 +1787,6 @@ const corsOptions = {
 app.use(cors(corsOptions));
 
 // Phục vụ các tệp tĩnh của thư mục frontend trực tiếp từ backend
-const path = require('path');
 app.use(express.static(path.join(__dirname, '../frontend')));
 
 // Endpoint /ping để giữ server luôn hoạt động (uptime check trên Render)
